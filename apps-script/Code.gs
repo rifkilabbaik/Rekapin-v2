@@ -1,22 +1,30 @@
-// ============================================================================
-// SALES DASHBOARD v8 — Apps Script (Sales + Regional + Kegiatan + Komplain)
-// ============================================================================
-// Sheet 'Data': 1 baris per (Sales Date, Branch), kolom = channel
-// Sheet 'Regional': mapping toko aktif
-// ============================================================================
+
 
 const SHEETS = { DATA: 'Data', REGIONAL: 'Regional', KEGIATAN: 'Kegiatan', KOMPLAIN: 'Komplain' };
-const CHANNELS = ['DINE IN','TAKE AWAY','GRABFOOD','GOFOOD','SHOPEE FOOD','BAZAR','CATERING','ESB Order Delivery','ESB Order Pickup','PAKAR'];
+const SALES_FIELDS = [
+  ['bruto',           'Bruto'],
+  ['dineIn',          'Dine In'],
+  ['takeAway',        'Take Away'],
+  ['shopeeFood',      'ShopeeFood'],
+  ['goFood',          'GoFood'],
+  ['grabFood',        'GrabFood'],
+  ['katering',        'Katering'],
+  ['mdr',             'Mdr'],
+  ['diskonOnline',    'Diskon Online'],
+  ['biayaOnline',     'Biaya Online'],
+  ['biayaPemasaran',  'Biaya Pemasaran'],
+  ['diskon',          'Diskon'],
+  ['biayaPengemasan', 'Biaya Pengemasan']
+];
 const HEADERS = {
-  DATA:     ['Sales Date', 'Branch Name', ...CHANNELS, 'Total'],
+  DATA:     ['Tanggal', 'Nama Toko'].concat(SALES_FIELDS.map(function (f) { return f[1]; })),
   REGIONAL: ['Regional', 'Area', 'Nama Toko'],
-  // Kegiatan: Tanggal | Nama | Nama Toko | Kegiatan | Keterangan 1 | Keterangan 2
+
   KEGIATAN: ['Tanggal', 'Nama', 'Nama Toko', 'Kegiatan', 'Keterangan 1', 'Keterangan 2'],
-  // Komplain: hanya kolom yang diinput dari aplikasi. Sheet boleh punya kolom lain
-  // (Case Id, Tanggal Komplain, Area Manager, dst) — kolom itu dibiarkan kosong.
+
   KOMPLAIN: ['Nama', 'Kontak', 'Alamat', 'Nama Store', 'Media Komplain', 'Kategori', 'Tanggal Transaksi', 'Isi Komplain']
 };
-// key field -> nama header. Dipakai form input (subset) & upload file (semua).
+
 const KOMPLAIN_FIELDS = [
   ['caseId',      'Case Id'],
   ['name',        'Nama'],
@@ -32,7 +40,7 @@ const KOMPLAIN_FIELDS = [
   ['areaMgr',     'Area Manager'],
   ['regionalMgr', 'Regional Manager']
 ];
-// Kolom tanggal komplain -> disimpan sebagai TEXT (hindari geser timezone)
+
 const KOMPLAIN_DATE_KEYS = ['trxDate', 'cmpDate', 'inputDate'];
 const CELL_LIMIT = 10000000;
 
@@ -66,20 +74,14 @@ function _handle(e, fn) {
   catch (err) { return _json({ status: 'error', error: err.message, stack: (err.stack||'').split('\n').slice(0,3).join('\n') }); }
 }
 
-// ============================================================================
-// FETCH
-// ============================================================================
 function _fetchAll() {
   const sheet = _getSheet(SHEETS.DATA, HEADERS.DATA);
   const values = sheet.getDataRange().getValues();
   if (values.length < 2) return [];
-  const header = values[0].map(v => String(v || '').trim().toLowerCase());
-  const dateIdx = header.indexOf('sales date');
-  const branchIdx = header.indexOf('branch name');
-  const totalIdx = header.indexOf('total');
-  const chIdx = {};
-  CHANNELS.forEach(c => { chIdx[c] = header.indexOf(c.toLowerCase()); });
-  if (dateIdx < 0 || branchIdx < 0) throw new Error('Header sheet Data tidak valid');
+  const idx = _headerIndex(values[0]);
+  const dateIdx = idx['tanggal'];
+  const branchIdx = idx['nama toko'];
+  if (dateIdx === undefined || branchIdx === undefined) throw new Error('Header sheet Data tidak valid');
 
   const rows = [];
   for (let i = 1; i < values.length; i++) {
@@ -87,19 +89,12 @@ function _fetchAll() {
     if (!r[dateIdx] || !r[branchIdx]) continue;
     const date = _normalizeDate(r[dateIdx]);
     if (!date) continue;
-    const channels = {};
-    let total = 0;
-    CHANNELS.forEach(c => {
-      const idx = chIdx[c];
-      const v = idx >= 0 ? (Number(r[idx]) || 0) : 0;
-      channels[c] = v;
-      total += v;
+    const row = { date: date, branch: String(r[branchIdx]).trim() };
+    SALES_FIELDS.forEach(f => {
+      const ci = idx[f[1].toLowerCase()];
+      row[f[0]] = ci === undefined ? 0 : (Number(r[ci]) || 0);
     });
-    const totalSheet = totalIdx >= 0 ? Number(r[totalIdx]) || 0 : 0;
-    rows.push({
-      date, branch: String(r[branchIdx]).trim(),
-      channels, total: totalSheet > 0 ? totalSheet : total
-    });
+    rows.push(row);
   }
   return rows;
 }
@@ -117,9 +112,6 @@ function _fetchRegional() {
   return rows;
 }
 
-// ============================================================================
-// STATUS & CAPACITY
-// ============================================================================
 function _status() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheets = ss.getSheets();
@@ -158,11 +150,7 @@ function _debug() {
   return { spreadsheet: ss.getName(), id: ss.getId(), sheets: allSheets };
 }
 
-// ============================================================================
-// DUPLICATE CHECK — cek pasangan (date, branch)
-// ============================================================================
 function _checkDuplicate(pairs) {
-  // pairs = [{date, branch}, ...]
   const sheet = _getSheet(SHEETS.DATA, HEADERS.DATA);
   const values = sheet.getDataRange().getValues();
   const existing = {};
@@ -180,35 +168,20 @@ function _checkDuplicate(pairs) {
   return { totalInFile: pairs.length, duplicates: duplicates.length, newOnes: newOnes.length, duplicatePairs: duplicates.slice(0, 20) };
 }
 
-// ============================================================================
-// UPLOAD — batch insert
-// ============================================================================
 function _upload(rows) {
-  // rows = [{date, branch, channels: {...}}, ...]
   if (!rows || rows.length === 0) return { added: 0 };
   const sheet = _getSheet(SHEETS.DATA, HEADERS.DATA);
   const arr = rows.map(r => {
     const line = [r.date, r.branch];
-    let total = 0;
-    CHANNELS.forEach(c => {
-      const v = Number((r.channels || {})[c]) || 0;
-      line.push(v);
-      total += v;
-    });
-    line.push(total);
+    SALES_FIELDS.forEach(f => { line.push(Number(r[f[0]]) || 0); });
     return line;
   });
   const lastRow = sheet.getLastRow();
-  // Paksa kolom Sales Date (kolom 1) jadi TEXT supaya tidak ada konversi timezone
   sheet.getRange(lastRow + 1, 1, arr.length, 1).setNumberFormat('@');
   sheet.getRange(lastRow + 1, 1, arr.length, HEADERS.DATA.length).setValues(arr);
   return { added: arr.length };
 }
 
-// ============================================================================
-// KEGIATAN — sheet "Kegiatan"
-// Tanggal | Nama | Nama Toko | Kegiatan | Keterangan 1 | Keterangan 2
-// ============================================================================
 function _fetchKegiatan() {
   const sheet = _getSheetSoft(SHEETS.KEGIATAN, HEADERS.KEGIATAN);
   if (sheet.getLastRow() < 2) return [];
@@ -249,10 +222,6 @@ function _addKegiatan(row) {
   }, ['tanggal']);
 }
 
-// ============================================================================
-// KOMPLAIN — sheet "Komplain"
-// Hanya 8 kolom yang diinput dari aplikasi; kolom lain dibiarkan kosong.
-// ============================================================================
 function _fetchKomplain() {
   const sheet = _getSheetSoft(SHEETS.KOMPLAIN, HEADERS.KOMPLAIN);
   if (sheet.getLastRow() < 2) return [];
@@ -298,17 +267,12 @@ function _addKomplain(row) {
   }, ['tanggal transaksi']);
 }
 
-// ============================================================================
-// KOMPLAIN — upload file (batch)
-// ============================================================================
-// Kunci duplikat. HARUS sama dengan UploadParser.complaintKey() di upload.js.
 function _komplainKey(row) {
   const norm = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().toLowerCase();
   if (norm(row.caseId)) return 'id:' + norm(row.caseId);
   return 'x:' + [norm(row.name), norm(row.store), String(row.trxDate || '').slice(0, 10), norm(row.body)].join('|');
 }
 
-// Baca sheet Komplain sekali, hasilkan set kunci yang sudah ada
 function _komplainExistingKeys() {
   const sheet = _getSheetSoft(SHEETS.KOMPLAIN, HEADERS.KOMPLAIN);
   const set = {};
@@ -325,7 +289,7 @@ function _komplainExistingKeys() {
       row[f[0]] = ci === undefined ? '' : r[ci];
     });
     if (!String(row.name || '').trim() && !String(row.store || '').trim()) continue;
-    // Tanggal di sheet bisa berupa Date object -> samakan jadi yyyy-MM-dd dulu
+
     row.trxDate = _normalizeDate(row.trxDate) || String(row.trxDate || '');
     set[_komplainKey(row)] = true;
   }
@@ -339,11 +303,10 @@ function _uploadKomplain(rows) {
   const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const idx = _headerIndex(headerRow);
 
-  // Tambah header yang belum ada di kanan (mis. sheet baru tanpa Case Id)
   let width = lastCol;
   KOMPLAIN_FIELDS.forEach(f => {
     const key = f[1].toLowerCase();
-    // Hanya tambahkan kalau ada datanya di batch ini
+
     const used = rows.some(r => String(r[f[0]] == null ? '' : r[f[0]]).trim() !== '');
     if (idx[key] === undefined && used) {
       width++;
@@ -358,7 +321,7 @@ function _uploadKomplain(rows) {
   rows.forEach(r => {
     if (!String(r.name || '').trim() || !String(r.store || '').trim()) { skipped++; return; }
     if (existing[_komplainKey(r)]) { skipped++; return; }
-    existing[_komplainKey(r)] = true;   // cegah duplikat di dalam batch yang sama
+    existing[_komplainKey(r)] = true;
     const line = new Array(width).fill('');
     KOMPLAIN_FIELDS.forEach(f => {
       const ci = idx[f[1].toLowerCase()];
@@ -371,7 +334,7 @@ function _uploadKomplain(rows) {
   if (matrix.length === 0) return { added: 0, skipped: skipped };
 
   const targetRow = sheet.getLastRow() + 1;
-  // Paksa kolom tanggal jadi TEXT untuk seluruh blok baris baru
+
   KOMPLAIN_DATE_KEYS.forEach(k => {
     const header = (KOMPLAIN_FIELDS.filter(f => f[0] === k)[0] || [])[1];
     const ci = header ? idx[header.toLowerCase()] : undefined;
@@ -381,9 +344,6 @@ function _uploadKomplain(rows) {
   return { added: matrix.length, skipped: skipped };
 }
 
-// ============================================================================
-// HELPERS
-// ============================================================================
 function _getSheet(name, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let s = ss.getSheetByName(name);
@@ -391,7 +351,7 @@ function _getSheet(name, headers) {
     s = ss.insertSheet(name);
     s.getRange(1, 1, 1, headers.length).setValues([headers]);
     s.setFrozenRows(1);
-    // Trim kolom & rows berlebih
+
     const cols = s.getMaxColumns();
     if (cols > headers.length) s.deleteColumns(headers.length + 1, cols - headers.length);
     const rows = s.getMaxRows();
@@ -400,7 +360,7 @@ function _getSheet(name, headers) {
     s.getRange(1, 1, 1, headers.length).setValues([headers]);
     s.setFrozenRows(1);
   }
-  // Trim kolom kalau sheet lama masih boros
+
   const cols = s.getMaxColumns();
   if (cols > headers.length) s.deleteColumns(headers.length + 1, cols - headers.length);
   return s;
@@ -408,7 +368,6 @@ function _getSheet(name, headers) {
 
 function _normalizeDate(v) {
   if (v instanceof Date) {
-    // Pakai spreadsheet timezone (bukan script timezone) supaya konsisten dgn cara Sheets simpan
     const tz = SpreadsheetApp.getActiveSpreadsheet().getSpreadsheetTimeZone();
     return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
   }
@@ -428,9 +387,6 @@ function _normalizeDate(v) {
 function _pad(s) { return String(s).padStart(2, '0'); }
 function _json(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
-// ---- Sheet helper yang TIDAK memangkas kolom.
-// Dipakai untuk Kegiatan/Komplain: sheet-nya boleh punya kolom tambahan
-// (mis. Case Id, Tanggal Komplain, Area Manager) yang tidak boleh dihapus.
 function _getSheetSoft(name, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let s = ss.getSheetByName(name);
@@ -447,7 +403,6 @@ function _getSheetSoft(name, headers) {
   return s;
 }
 
-// Peta nama header (lowercase, trimmed) -> index kolom (0-based)
 function _headerIndex(headerRow) {
   const map = {};
   (headerRow || []).forEach((h, i) => {
@@ -461,16 +416,12 @@ function _at(row, idx, key) {
   return i === undefined ? '' : row[i];
 }
 
-// Append 1 baris dengan mencocokkan header sheet (bukan urutan tetap),
-// supaya kolom ekstra di sheet tetap utuh & tidak bergeser.
-// textCols = daftar header yang harus disimpan sebagai TEXT (tanggal).
 function _appendByHeader(sheetName, defaultHeaders, valuesByHeader, textCols) {
   const sheet = _getSheetSoft(sheetName, defaultHeaders);
   const lastCol = Math.max(sheet.getLastColumn(), defaultHeaders.length);
   const headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
   const idx = _headerIndex(headerRow);
 
-  // Header yang belum ada di sheet -> tambahkan di kolom paling kanan
   let width = lastCol;
   Object.keys(valuesByHeader).forEach(key => {
     if (idx[key] === undefined) {
@@ -485,7 +436,7 @@ function _appendByHeader(sheetName, defaultHeaders, valuesByHeader, textCols) {
   Object.keys(valuesByHeader).forEach(key => { line[idx[key]] = valuesByHeader[key]; });
 
   const targetRow = sheet.getLastRow() + 1;
-  // Paksa kolom tanggal jadi TEXT supaya tidak ada konversi timezone
+
   (textCols || []).forEach(key => {
     if (idx[key] !== undefined) sheet.getRange(targetRow, idx[key] + 1, 1, 1).setNumberFormat('@');
   });

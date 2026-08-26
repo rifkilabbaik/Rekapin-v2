@@ -1,42 +1,199 @@
-// ============================================================================
-// PARSE FILE UPLOAD
-//  - Penjualan : "Sales Summary By Branch Report"  (Sales Date + Branch Name)
-//  - Komplain  : export sheet Komplain             (Nama Store + Media Komplain)
-// Jenis file dideteksi otomatis dari baris headernya.
-// ============================================================================
 const UploadParser = {
-  // Entry point: baca workbook sekali, deteksi jenisnya, lalu delegasikan.
-  async parse(file, progress) {
+  async parseFiles(files, progress) {
+    const list = Array.from(files || []);
+    if (list.length === 0) throw new Error('Tidak ada file yang dipilih.');
     const step = (m, p) => progress && progress(m, p);
-    step('Membaca file...', 10);
-    const buf = await file.arrayBuffer();
-    step('Parsing spreadsheet...', 25);
-    // cellDates:false supaya date jadi number serial (bukan Date object) — hindari bug timezone XLSX library
-    const wb = XLSX.read(buf, { type: 'array', cellDates: false });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-
-    const det = this._detect(aoa);
-    if (det.kind === 'komplain') return this._parseComplaint(file, aoa, det.headerRow, step);
-    return this._parseSales(file, aoa, det.headerRow, step);
+    const parsed = [];
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      step('Membaca ' + f.name + ' (' + (i + 1) + '/' + list.length + ')', Math.round((i / list.length) * 80) + 5);
+      parsed.push(await this._parseOne(f));
+    }
+    const kinds = Array.from(new Set(parsed.map(p => p.kind)));
+    if (kinds.length > 1) throw new Error('File penjualan dan komplain tidak bisa diupload bersamaan. Pilih satu jenis saja.');
+    step('Menggabungkan data...', 90);
+    return kinds[0] === 'komplain' ? this._mergeComplaint(parsed) : this._mergeSales(parsed);
   },
 
-  // Cari baris header + tentukan jenis file
-  _detect(aoa) {
+  async _parseOne(file) {
+    const head = await this._readTextSlice(file, 4096);
+    if (/<\s*table/i.test(head)) return this._parseSales(file, await file.text());
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+    const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: true });
+    const headerRow = this._findComplaintHeader(aoa);
+    if (headerRow < 0) {
+      throw new Error('Format file "' + file.name + '" tidak dikenali. Penjualan: file export Grand Total All Store. Komplain: file dengan kolom "Nama Store" & "Media Komplain".');
+    }
+    return this._parseComplaint(file, aoa, headerRow);
+  },
+
+  _readTextSlice(file, bytes) {
+    return file.slice(0, bytes).text();
+  },
+
+  _mergeSales(parsed) {
+    const rows = [];
+    const files = [];
+    let skipped = 0;
+    parsed.forEach(p => {
+      rows.push(...p.rows);
+      files.push(p.meta.fileName);
+      skipped += p.meta.skipped;
+    });
+    const seen = {};
+    const dupes = [];
+    rows.forEach(r => {
+      const k = r.date + '|' + r.branch;
+      if (seen[k]) dupes.push(k); else seen[k] = 1;
+    });
+    if (dupes.length) throw new Error('Ada ' + dupes.length + ' baris tanggal + toko yang sama di file yang dipilih. Pastikan satu tanggal hanya diupload sekali.');
+    if (rows.length === 0) throw new Error('Tidak ada baris penjualan yang valid.');
+    const dates = Array.from(new Set(rows.map(r => r.date))).sort();
+    return {
+      kind: 'sales',
+      rows,
+      meta: {
+        fileName: files.length === 1 ? files[0] : files.length + ' file',
+        fileCount: files.length,
+        rowCount: rows.length,
+        skipped,
+        branches: Array.from(new Set(rows.map(r => r.branch))),
+        dates,
+        totalBruto: rows.reduce((s, r) => s + r.bruto, 0),
+        dateStart: dates[0],
+        dateEnd: dates[dates.length - 1]
+      }
+    };
+  },
+
+  _mergeComplaint(parsed) {
+    const rows = [];
+    const files = [];
+    let skipped = 0;
+    parsed.forEach(p => {
+      rows.push(...p.rows);
+      files.push(p.meta.fileName);
+      skipped += p.meta.skipped;
+    });
+    if (rows.length === 0) throw new Error('Tidak ada baris komplain yang valid.');
+    const dates = rows.map(r => String(r.trxDate).slice(0, 10)).sort();
+    return {
+      kind: 'komplain',
+      rows,
+      meta: {
+        fileName: files.length === 1 ? files[0] : files.length + ' file',
+        fileCount: files.length,
+        rowCount: rows.length,
+        skipped,
+        branches: Array.from(new Set(rows.map(r => r.store))),
+        dateStart: dates[0],
+        dateEnd: dates[dates.length - 1]
+      }
+    };
+  },
+
+  _parseSales(file, text) {
+    const date = this.dateFromFileName(file.name);
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    const table = doc.querySelector('table');
+    if (!table) throw new Error('Tabel penjualan tidak ditemukan di "' + file.name + '".');
+    const flat = this._salesHeaderMap(table);
+    const storeIdx = flat.indexOf('toko');
+    if (storeIdx < 0) throw new Error('Kolom "Toko" tidak ada di "' + file.name + '".');
+    const idx = {};
+    CONFIG.SALES_FIELDS.forEach(f => {
+      const i = this._findColumn(flat, f.source);
+      if (i < 0) throw new Error('Kolom "' + f.header + '" tidak ada di "' + file.name + '".');
+      idx[f.key] = i;
+    });
+
+    const rows = [];
+    let skipped = 0;
+    const trs = table.querySelectorAll('tbody tr');
+    trs.forEach(tr => {
+      const cells = Array.from(tr.cells).map(td => td.textContent.trim());
+      const branch = cells[storeIdx] || '';
+      if (!branch || branch.toLowerCase() === 'total') return;
+      if (cells.length < flat.length) { skipped++; return; }
+      const row = { date, branch };
+      CONFIG.SALES_FIELDS.forEach(f => { row[f.key] = this._num(cells[idx[f.key]]); });
+      rows.push(row);
+    });
+    if (rows.length === 0) throw new Error('Tidak ada baris toko di "' + file.name + '".');
+    return { kind: 'sales', rows, meta: { fileName: file.name, skipped } };
+  },
+
+  _salesHeaderMap(table) {
+    const rows = table.querySelectorAll('thead tr');
+    if (rows.length === 0) throw new Error('Baris header tabel tidak ditemukan.');
+    const top = Array.from(rows[0].cells);
+    const sub = rows.length > 1 ? Array.from(rows[1].cells) : [];
+    const flat = [];
+    let subPos = 0;
+    top.forEach(cell => {
+      const name = cell.textContent.trim().toLowerCase().replace(/\s+/g, ' ');
+      const span = parseInt(cell.getAttribute('colspan') || '1', 10) || 1;
+      if (span > 1) {
+        for (let k = 0; k < span; k++) {
+          const s = sub[subPos] ? sub[subPos].textContent.trim().toLowerCase().replace(/\s+/g, ' ') : String(k);
+          flat.push(name + '|' + s);
+          subPos++;
+        }
+      } else {
+        flat.push(name);
+      }
+    });
+    return flat;
+  },
+
+  _findColumn(flat, source) {
+    let i = flat.indexOf(source);
+    if (i >= 0) return i;
+    i = flat.indexOf(source + '|penjualan');
+    if (i >= 0) return i;
+    return flat.findIndex(h => h.indexOf(source + '|') === 0);
+  },
+
+  dateFromFileName(name) {
+    const found = String(name).match(/\d{8}/g) || [];
+    const dates = Array.from(new Set(found.map(s => this._fromCompact(s)).filter(Boolean)));
+    if (dates.length === 0) throw new Error('Tanggal tidak ada di nama file "' + name + '". Nama file harus memuat tanggal, contoh: Grand_Total_All_Store_20260801_20260801.xls');
+    if (dates.length > 1) throw new Error('Nama file "' + name + '" memuat rentang tanggal ' + dates[0] + ' s/d ' + dates[dates.length - 1] + '. File harus data 1 hari.');
+    return dates[0];
+  },
+
+  _fromCompact(s) {
+    const y = parseInt(s.slice(0, 4), 10);
+    const m = parseInt(s.slice(4, 6), 10);
+    const d = parseInt(s.slice(6, 8), 10);
+    if (y < 2000 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(y, m - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+    return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  },
+
+  _num(v) {
+    if (v == null) return 0;
+    let s = String(v).replace(/[\s\u00a0]/g, '');
+    if (!s) return 0;
+    const neg = /^\(.*\)$/.test(s) || s.indexOf('-') === 0;
+    s = s.replace(/[()\-]/g, '').replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
+    if (isNaN(n)) return 0;
+    return neg ? -n : n;
+  },
+
+  _findComplaintHeader(aoa) {
     const has = (row, name) => row.some(c => typeof c === 'string' && c.trim().toLowerCase() === name);
     for (let i = 0; i < Math.min(aoa.length, 25); i++) {
       const r = aoa[i] || [];
-      if (has(r, 'sales date') && has(r, 'branch name')) return { kind: 'sales', headerRow: i };
-      // File komplain: cukup dikenali dari Nama Store + Media Komplain
-      if (has(r, 'nama store') && has(r, 'media komplain')) return { kind: 'komplain', headerRow: i };
+      if (has(r, 'nama store') && has(r, 'media komplain')) return i;
     }
-    throw new Error('Format file tidak dikenali. Untuk penjualan butuh header "Sales Date" & "Branch Name"; untuk komplain butuh "Nama Store" & "Media Komplain".');
+    return -1;
   },
 
-  // ==========================================================================
-  // KOMPLAIN
-  // ==========================================================================
-  _parseComplaint(file, aoa, headerRow, step) {
+  _parseComplaint(file, aoa, headerRow) {
     const header = aoa[headerRow].map(c => String(c || '').trim());
     const lower = header.map(h => h.toLowerCase());
     const cols = CONFIG.COMPLAINT_UPLOAD_COLUMNS
@@ -47,10 +204,9 @@ const UploadParser = {
     const missing = need.filter(k => !cols.some(c => c.key === k));
     if (missing.length) {
       const labels = CONFIG.COMPLAINT_UPLOAD_COLUMNS.filter(c => missing.includes(c.key)).map(c => c.header);
-      throw new Error('Kolom wajib tidak ada di file: ' + labels.join(', '));
+      throw new Error('Kolom wajib tidak ada di "' + file.name + '": ' + labels.join(', '));
     }
 
-    step('Membaca data komplain...', 45);
     const rows = [];
     let skipped = 0;
     for (let i = headerRow + 1; i < aoa.length; i++) {
@@ -61,34 +217,15 @@ const UploadParser = {
         const raw = r[c.idx];
         row[c.key] = c.type === 'datetime' ? this._normalizeDateTime(raw) : this._text(raw);
       });
-      // Baris kosong -> lewati tanpa dihitung
       if (!row.name && !row.store && !row.body) continue;
-      // Baris tidak lengkap / tanggal tidak valid (mis. typo tahun "20026-08-15")
       if (!row.name || !row.store || !row.trxDate || !row.body) { skipped++; continue; }
       row.dedupKey = this.complaintKey(row);
       rows.push(row);
     }
-
-    step('Menghitung...', 70);
-    if (rows.length === 0) throw new Error('Tidak ada baris komplain yang valid di file ini.');
-
-    const storeSet = new Set(rows.map(r => r.store));
-    const dates = rows.map(r => String(r.trxDate).slice(0, 10)).sort();
-    return {
-      kind: 'komplain',
-      rows,
-      meta: {
-        fileName: file.name,
-        rowCount: rows.length,
-        skipped,
-        branches: Array.from(storeSet),
-        dateStart: dates[0],
-        dateEnd: dates[dates.length - 1]
-      }
-    };
+    if (rows.length === 0) throw new Error('Tidak ada baris komplain yang valid di "' + file.name + '".');
+    return { kind: 'komplain', rows, meta: { fileName: file.name, skipped } };
   },
 
-  // Kunci duplikat komplain. HARUS sama dengan _komplainKey() di Code.gs.
   complaintKey(row) {
     const norm = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().toLowerCase();
     if (norm(row.caseId)) return 'id:' + norm(row.caseId);
@@ -101,8 +238,6 @@ const UploadParser = {
     return String(v).replace(/\r\n/g, '\n').trim();
   },
 
-  // Simpan tanggal+jam apa adanya (yyyy-MM-dd atau yyyy-MM-ddTHH:mm)
-  // supaya format di sheet tetap sama dengan data yang sudah ada.
   _normalizeDateTime(v) {
     if (v == null || v === '') return '';
     const p = (n) => String(n).padStart(2, '0');
@@ -117,7 +252,6 @@ const UploadParser = {
       return (d.H || d.M) ? base + 'T' + p(d.H) + ':' + p(d.M) : base;
     }
     const str = String(v).trim();
-    // yyyy-MM-dd[THH:mm] — tahun HARUS tepat 4 digit, jadi "20026-08-15" ditolak
     let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T ](\d{1,2}):(\d{2}))?$/);
     if (m) {
       const base = m[1] + '-' + p(m[2]) + '-' + p(m[3]);
@@ -129,85 +263,5 @@ const UploadParser = {
       return m[4] ? base + 'T' + p(m[4]) + ':' + m[5] : base;
     }
     return '';
-  },
-
-  // ==========================================================================
-  // PENJUALAN
-  // ==========================================================================
-  _parseSales(file, aoa, headerRow, step) {
-    const header = aoa[headerRow].map(c => String(c || '').trim());
-    const dateIdx = header.findIndex(h => h.toLowerCase() === 'sales date');
-    const branchIdx = header.findIndex(h => h.toLowerCase() === 'branch name');
-    const chIdx = {};
-    CONFIG.CHANNELS.forEach(c => {
-      chIdx[c] = header.findIndex(h => h.toLowerCase() === c.toLowerCase());
-    });
-
-    step('Membaca data...', 45);
-    const rows = [];
-    for (let i = headerRow + 1; i < aoa.length; i++) {
-      const r = aoa[i];
-      if (!r || r[dateIdx] == null || r[branchIdx] == null) continue;
-      const date = this._normalizeDate(r[dateIdx]);
-      if (!date) continue;
-      const branch = String(r[branchIdx]).trim();
-      if (!branch) continue;
-
-      const channels = {};
-      let total = 0, hasValue = false;
-      CONFIG.CHANNELS.forEach(c => {
-        const idx = chIdx[c];
-        let v = 0;
-        if (idx >= 0 && r[idx] != null && r[idx] !== '') {
-          v = Number(r[idx]) || 0;
-          if (v > 0) hasValue = true;
-        }
-        channels[c] = v;
-        total += v;
-      });
-
-      // ➤ hapus branch tanpa sales
-      if (!hasValue || total === 0) continue;
-      rows.push({ date, branch, channels, total });
-    }
-
-    step('Menghitung...', 70);
-    if (rows.length === 0) throw new Error('Tidak ada baris data valid dengan sales > 0.');
-
-    const branchSet = new Set(rows.map(r => r.branch));
-    const dateSet = new Set(rows.map(r => r.date));
-    const grand = rows.reduce((s, r) => s + r.total, 0);
-
-    return {
-      kind: 'sales',
-      rows,
-      meta: {
-        fileName: file.name,
-        rowCount: rows.length,
-        skipped: 0,
-        branches: Array.from(branchSet),
-        dates: Array.from(dateSet).sort(),
-        totalSales: grand,
-        dateStart: Array.from(dateSet).sort()[0],
-        dateEnd: Array.from(dateSet).sort().slice(-1)[0]
-      }
-    };
-  },
-
-  _normalizeDate(v) {
-    if (v instanceof Date) return v.getFullYear() + '-' + String(v.getMonth()+1).padStart(2,'0') + '-' + String(v.getDate()).padStart(2,'0');
-    if (typeof v === 'number') {
-      const d = XLSX.SSF.parse_date_code(v);
-      if (d) return d.y + '-' + String(d.m).padStart(2,'0') + '-' + String(d.d).padStart(2,'0');
-    }
-    if (typeof v === 'string') {
-      let m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-      if (m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
-      m = v.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-      if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
-      const d = new Date(v);
-      if (!isNaN(d)) return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    }
-    return null;
   }
 };
