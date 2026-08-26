@@ -16,10 +16,10 @@ const UploadParser = {
   },
 
   async _parseOne(file) {
-    const head = await this._readTextSlice(file, 4096);
-    if (/<\s*table/i.test(head)) return this._parseSales(file, await file.text());
-    const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+    const bytes = new Uint8Array(await this._readBuffer(file));
+    if (!bytes.length) throw new Error('File "' + file.name + '" kosong.');
+    if (this._looksHtml(bytes)) return this._parseSales(file, this._decode(bytes));
+    const wb = XLSX.read(bytes, { type: 'array', cellDates: false });
     const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: true });
     const headerRow = this._findComplaintHeader(aoa);
     if (headerRow < 0) {
@@ -28,8 +28,36 @@ const UploadParser = {
     return this._parseComplaint(file, aoa, headerRow);
   },
 
-  _readTextSlice(file, bytes) {
-    return file.slice(0, bytes).text();
+  async _readBuffer(file) {
+    try {
+      return await file.arrayBuffer();
+    } catch (e) {
+      try {
+        return await this._readWithFileReader(file);
+      } catch (e2) {
+        throw new Error('File "' + file.name + '" tidak bisa dibaca. Biasanya karena filenya masih di cloud (Google Drive / Files) atau sudah dipindah, dihapus, atau ditimpa setelah dipilih. Download dulu ke penyimpanan perangkat, lalu pilih ulang filenya.');
+      }
+    }
+  },
+
+  _readWithFileReader(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(fr.error || new Error('read failed'));
+      try { fr.readAsArrayBuffer(file); } catch (e) { reject(e); }
+    });
+  },
+
+  _decode(bytes) {
+    const utf8 = new TextDecoder('utf-8').decode(bytes);
+    if (utf8.indexOf('\uFFFD') < 0) return utf8;
+    try { return new TextDecoder('windows-1252').decode(bytes); } catch (e) { return utf8; }
+  },
+
+  _looksHtml(bytes) {
+    const head = new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(0, 4096)).toLowerCase();
+    return head.indexOf('<table') >= 0 || head.indexOf('<html') >= 0 || head.indexOf('<!doctype html') >= 0;
   },
 
   _mergeSales(parsed) {
