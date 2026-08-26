@@ -156,21 +156,24 @@ const UploadParser = {
   },
 
   dateFromFileName(name) {
-    const found = String(name).match(/\d{8}/g) || [];
-    const dates = Array.from(new Set(found.map(s => this._fromCompact(s)).filter(Boolean)));
-    if (dates.length === 0) throw new Error('Tanggal tidak ada di nama file "' + name + '". Nama file harus memuat tanggal, contoh: Grand_Total_All_Store_20260801_20260801.xls');
+    const raw = String(name);
+    let found = (raw.match(/\d{4}-\d{1,2}-\d{1,2}/g) || []).map(v => this._fromParts(v.split('-')));
+    if (found.length === 0) found = (raw.match(/\d{8}/g) || []).map(v => this._fromParts([v.slice(0, 4), v.slice(4, 6), v.slice(6, 8)]));
+    const dates = Array.from(new Set(found.filter(Boolean))).sort();
+    if (dates.length === 0) throw new Error('Tanggal tidak ada di nama file "' + name + '". Nama file harus memuat tanggal, contoh: Grand_Total_All_Store_2026-08-01_2026-08-01.xls');
     if (dates.length > 1) throw new Error('Nama file "' + name + '" memuat rentang tanggal ' + dates[0] + ' s/d ' + dates[dates.length - 1] + '. File harus data 1 hari.');
     return dates[0];
   },
 
-  _fromCompact(s) {
-    const y = parseInt(s.slice(0, 4), 10);
-    const m = parseInt(s.slice(4, 6), 10);
-    const d = parseInt(s.slice(6, 8), 10);
-    if (y < 2000 || y > 2999 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  _fromParts(parts) {
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    const d = parseInt(parts[2], 10);
+    if (!(y >= 2000 && y <= 2999)) return null;
     const dt = new Date(y, m - 1, d);
     if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
-    return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+    const p = (n) => String(n).padStart(2, '0');
+    return y + '-' + p(m) + '-' + p(d);
   },
 
   _num(v) {
