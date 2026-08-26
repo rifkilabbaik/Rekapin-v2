@@ -1,7 +1,3 @@
-/* ============================================================================
-   Sales Dashboard v4 — Bone white + Sea blue + Dark mode
-   ============================================================================ */
-
 :root {
   --bone: #F7F4EC;
   --bone-2: #FFFDF7;
@@ -23,7 +19,6 @@
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif;
 }
 
-/* Dark/light theme now handled by JS via palette CSS variables (see config.js PALETTES). */
 :root { --accent-2: var(--sea); }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -41,12 +36,11 @@ body {
   padding-left: var(--rail-w);
   transition: padding-left 220ms cubic-bezier(0.4, 0, 0.2, 1);
 }
-/* Layar lebar: menu selalu menempel (rail ikon), terbuka mendorong konten. */
+
 @media (min-width: 900px) {
   body.nav-open { padding-left: var(--nav-w); }
 }
-/* Layar HP: rail dihilangkan supaya data tidak jadi sempit. Menu kembali
-   berupa laci yang muncul saat hamburger ditekan, logo pindah ke topbar. */
+
 @media (max-width: 899px) {
   body { padding-left: 0; }
 }
@@ -55,7 +49,6 @@ button, input, select, textarea { font-family: inherit; }
 a { color: var(--sea); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* ===== SPLASH LOADING ===== */
 .splash {
   position: fixed;
   inset: 0;
@@ -79,7 +72,6 @@ a:hover { text-decoration: underline; }
 }
 .splash-sub { font-size: 13px; color: var(--ink-2); margin-top: 4px; letter-spacing: 0.02em; }
 
-/* Loading dots animation: '.' → '..' → '...' → repeat */
 .loading-dots::after {
   content: '';
   display: inline-block;
@@ -97,7 +89,6 @@ a:hover { text-decoration: underline; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ===== TOPBAR ===== */
 .topbar {
   background: var(--bone);
   border-bottom: 0.5px solid var(--line);
@@ -136,7 +127,7 @@ a:hover { text-decoration: underline; }
   display: block;
   flex-shrink: 0;
 }
-/* Di layar lebar logo sudah tampil di sidebar, jadi tidak perlu dobel */
+
 @media (min-width: 900px) { .topbar-logo { display: none; } }
 .topbar-title {
   flex: 1;
@@ -170,7 +161,6 @@ a:hover { text-decoration: underline; }
   font-weight: 500;
 }
 
-/* ===== SIDEBAR ===== */
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
@@ -181,12 +171,9 @@ a:hover { text-decoration: underline; }
   transition: opacity 200ms;
 }
 .sidebar-backdrop.open { opacity: 1; pointer-events: auto; }
-/* Layar lebar: menu terbuka mendorong konten, jadi tidak perlu backdrop */
+
 @media (min-width: 900px) { .sidebar-backdrop { display: none; } }
 
-/* Sidebar selalu terlihat:
-   - menu ditutup  -> rail sempit, hanya ikon
-   - menu dibuka   -> melebar, ikon + label                                   */
 .sidebar {
   position: fixed;
   top: 0;
@@ -221,8 +208,7 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
   letter-spacing: -0.01em;
 }
-/* "in" kuning mengikuti logo. Emasnya sedikit lebih tua dari logo supaya
-   tetap terbaca di latar krem/putih maupun tema gelap. */
+
 .brand-accent { color: #E0A800; }
 .sidebar:not(.open) .sidebar-brand { display: none; }
 
@@ -250,7 +236,7 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
   overflow: hidden;
 }
-/* Rail tertutup: ikon dibuat pas di tengah */
+
 .sidebar:not(.open) .sidebar-item {
   justify-content: center;
   padding-left: 8px;
@@ -270,7 +256,6 @@ a:hover { text-decoration: underline; }
   border-top: 0.5px solid var(--line);
 }
 
-/* ---- HP: sidebar jadi laci geser, bukan rail permanen ---- */
 @media (max-width: 899px) {
   .sidebar {
     width: var(--nav-w);
@@ -281,7 +266,7 @@ a:hover { text-decoration: underline; }
     box-shadow: 4px 0 24px rgba(31, 41, 55, 0.10);
   }
   .sidebar.open { transform: translateX(0); }
-  /* Di laci, nama menu selalu tampil (termasuk saat animasi menutup) */
+
   .sidebar:not(.open) .sidebar-brand { display: block; }
   .sidebar:not(.open) .sidebar-item span { display: inline; }
   .sidebar:not(.open) .sidebar-item {
@@ -291,7 +276,6 @@ a:hover { text-decoration: underline; }
   }
 }
 
-/* ===== CONTAINER & PAGES ===== */
 .container {
   max-width: 1200px;
   margin: 0 auto;
@@ -300,7 +284,6 @@ a:hover { text-decoration: underline; }
 .page { display: none; flex-direction: column; gap: 12px; }
 .page.active { display: flex; }
 
-/* ===== FILTER SUMMARY BAR ===== */
 .filter-summary {
   background: var(--sea-2);
   border-radius: 8px;
@@ -315,7 +298,6 @@ a:hover { text-decoration: underline; }
 }
 .filter-summary .reset { text-decoration: underline; cursor: pointer; }
 
-/* ===== METRIC CARDS ===== */
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -339,7 +321,6 @@ a:hover { text-decoration: underline; }
 .metric-card.accent .metric-value { color: var(--sea); }
 .metric-sub { font-size: 11px; color: var(--ink-3); margin-top: 4px; }
 
-/* ===== PANELS ===== */
 .panel {
   background: var(--bone-2);
   border: 0.5px solid var(--line);
@@ -374,14 +355,12 @@ a:hover { text-decoration: underline; }
 }
 .panel-tab.active { background: var(--sea-2); color: var(--sea); font-weight: 500; }
 
-/* ===== TWO-COL LAYOUT ===== */
 .two-col {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 12px;
 }
 
-/* ===== CHANNEL / PURPOSE LIST ===== */
 .channel-list { display: flex; flex-direction: column; gap: 10px; }
 .channel-row {
   display: grid;
@@ -402,7 +381,6 @@ a:hover { text-decoration: underline; }
 .channel-amount { text-align: right; font-variant-numeric: tabular-nums; }
 .channel-pct { text-align: right; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 
-/* ===== RANK / LIST ===== */
 .rank-list { display: flex; flex-direction: column; }
 .rank-row {
   display: flex;
@@ -434,11 +412,9 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 
-/* ===== CHART ===== */
 .chart-wrap { position: relative; height: 220px; }
 .chart-wrap.compact { height: 160px; }
 
-/* ===== BUTTONS ===== */
 .btn {
   background: var(--bone-2);
   border: 0.5px solid var(--line-2);
@@ -458,7 +434,6 @@ a:hover { text-decoration: underline; }
 .btn-block { display: block; width: 100%; text-align: center; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ===== MODAL ===== */
 .modal {
   position: fixed;
   inset: 0;
@@ -503,7 +478,6 @@ a:hover { text-decoration: underline; }
 }
 .icon-btn:hover { background: var(--line); color: var(--ink); }
 
-/* ===== FILTER MODAL SPECIFIC ===== */
 .filter-row {
   margin-bottom: 12px;
 }
@@ -531,7 +505,6 @@ a:hover { text-decoration: underline; }
 }
 .filter-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
-/* ===== SETTINGS ===== */
 .setting-group { margin-bottom: 16px; }
 .setting-label {
   font-size: 11px;
@@ -585,7 +558,6 @@ a:hover { text-decoration: underline; }
 .info-key { color: var(--ink-2); }
 .info-val { color: var(--ink); font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
 
-/* ===== CAPACITY BAR ===== */
 .capacity-bar {
   background: var(--bone);
   height: 8px;
@@ -601,7 +573,6 @@ a:hover { text-decoration: underline; }
 .capacity-fill.warn { background: #E8A234; }
 .capacity-fill.critical { background: var(--danger); }
 
-/* ===== UPLOAD MODAL ===== */
 .dropzone {
   border: 1px dashed var(--sea-3);
   background: var(--sea-2);
@@ -666,7 +637,6 @@ a:hover { text-decoration: underline; }
   margin-bottom: 12px;
 }
 
-/* ===== TOAST ===== */
 .toast {
   position: fixed;
   bottom: 30px;
@@ -681,7 +651,6 @@ a:hover { text-decoration: underline; }
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
-/* ===== MOBILE ===== */
 @media (max-width: 640px) {
   .topbar-inner { padding: 10px 12px; }
   .container { padding: 12px 12px; }
@@ -697,9 +666,6 @@ a:hover { text-decoration: underline; }
   .chart-wrap.compact { height: 130px; }
 }
 
-/* ===== v5 ADDITIONS ===== */
-
-/* Insight list */
 .insight-list { display: flex; flex-direction: column; gap: 8px; }
 .insight-row {
   display: flex;
@@ -718,7 +684,6 @@ a:hover { text-decoration: underline; }
   text-align: center;
 }
 
-/* Check list (multi-select channel di filter modal) */
 .check-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -738,7 +703,6 @@ a:hover { text-decoration: underline; }
 }
 .check-row input { margin: 0; }
 
-/* Calendar heatmap */
 .cal-wrap {
   display: grid;
   grid-template-columns: 24px 1fr;
@@ -790,7 +754,6 @@ a:hover { text-decoration: underline; }
   color: var(--ink-3);
 }
 
-/* Matrix table */
 .matrix-wrap { overflow-x: auto; }
 .matrix {
   border-collapse: collapse;
@@ -826,7 +789,6 @@ a:hover { text-decoration: underline; }
 .matrix-cell.l3 { background: rgba(74,144,184,0.40); color: white; }
 .matrix-cell.l4 { background: var(--sea); color: white; font-weight: 500; }
 
-/* Info box */
 .info-box {
   background: var(--sea-2);
   color: var(--sea);
@@ -836,7 +798,6 @@ a:hover { text-decoration: underline; }
   margin-bottom: 12px;
 }
 
-/* Mobile matrix */
 @media (max-width: 640px) {
   .matrix th, .matrix td { padding: 5px 3px; font-size: 10px; }
   .matrix-branch { max-width: 80px; }
@@ -847,20 +808,16 @@ a:hover { text-decoration: underline; }
   .cal-grid { grid-template-rows: repeat(7, 10px); }
 }
 
-/* ===== v5.1 additions ===== */
-
-/* Success color (green untuk growth positif) */
 :root {
   --success: #2A9D5A;
-  --rail-w: 56px;   /* lebar sidebar saat menu ditutup */
-  --nav-w: 232px;   /* lebar sidebar saat menu dibuka  */
+  --rail-w: 56px;
+  --nav-w: 232px;
 }
 [data-theme="dark"] { --success: #4CBF7C; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) { --success: #4CBF7C; }
 }
 
-/* Range trigger */
 .range-trigger {
   width: 100%;
   background: var(--bone-2);
@@ -875,7 +832,6 @@ a:hover { text-decoration: underline; }
 }
 .range-trigger:hover { border-color: var(--sea); }
 
-/* Mini calendar (inside range modal) */
 .cal-nav {
   display: flex;
   justify-content: space-between;
@@ -934,14 +890,12 @@ a:hover { text-decoration: underline; }
 .cal-mini-cell.range-mid   { background: var(--sea-2); border-radius: 0; }
 .cal-mini-cell.range-start + .cal-mini-cell.range-mid { border-left: none; }
 
-/* Link underline */
 .link-underline {
   color: var(--sea);
   text-decoration: underline;
   cursor: pointer;
 }
 
-/* Missing branches list */
 .missing-group { margin-bottom: 14px; }
 .missing-group-head {
   font-size: 11px;
@@ -962,11 +916,6 @@ a:hover { text-decoration: underline; }
   color: var(--ink);
 }
 
-/* ============================================================================
-   v6 additions — dashboard cards, sort chips, tabs, tables, dropdown-select
-   ============================================================================ */
-
-/* Metric hero (Total penjualan) */
 .metric-hero {
   background: var(--bone-2);
   border: 0.5px solid var(--line);
@@ -980,8 +929,7 @@ a:hover { text-decoration: underline; }
 .metric-hero:active { transform: scale(0.995); }
 .metric-hero-label { font-size: 13px; color: var(--ink-2); }
 .metric-hero-value {
-  /* "Rp" dan angkanya WAJIB satu baris — ukuran font mengecil sendiri
-     kalau layarnya sempit, bukan pindah baris. */
+
   font-size: clamp(20px, 6.4vw, 28px);
   font-weight: 500;
   margin-top: 6px;
@@ -1004,7 +952,6 @@ a:hover { text-decoration: underline; }
   letter-spacing: 0.06em;
 }
 
-/* Grouped metric cards */
 .metric-groups {
   display: grid;
   grid-template-columns: 1fr;
@@ -1066,7 +1013,6 @@ a:hover { text-decoration: underline; }
   margin-top: auto;
 }
 
-/* Sort chip (Regional/Area) */
 .sort-chip {
   background: var(--bone);
   border: 0.5px solid var(--line-2);
@@ -1080,7 +1026,6 @@ a:hover { text-decoration: underline; }
 }
 .sort-chip:hover { background: var(--sea-2); color: var(--sea); border-color: var(--sea-3); }
 
-/* Tab chips row */
 .tabs-row {
   display: flex;
   gap: 6px;
@@ -1110,7 +1055,6 @@ a:hover { text-decoration: underline; }
 }
 .tab-chip:hover { border-color: var(--sea-3); }
 
-/* Sub-filter grid (toko level) */
 .sub-filter {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1133,7 +1077,6 @@ a:hover { text-decoration: underline; }
   font-family: inherit;
 }
 
-/* Sales table */
 .stbl-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1176,7 +1119,6 @@ a:hover { text-decoration: underline; }
 .stbl-clickable:hover { background: var(--bone); }
 .stbl tbody tr:hover { background: var(--bone); }
 
-/* Percentage bar in contribution mode */
 .pct-bar {
   width: 60px;
   height: 5px;
@@ -1195,7 +1137,6 @@ a:hover { text-decoration: underline; }
 }
 .pct-txt { font-size: 10px; color: var(--ink-2); margin-top: 2px; }
 
-/* Dropdown-select (Settings) */
 .dropdown-select { position: relative; }
 .dd-btn {
   width: 100%;
@@ -1243,7 +1184,6 @@ a:hover { text-decoration: underline; }
   font-weight: 500;
 }
 
-/* Detail modal list */
 .detail-list {
   display: flex;
   flex-direction: column;
@@ -1279,11 +1219,9 @@ a:hover { text-decoration: underline; }
 }
 .detail-section:first-child { border-top: none; margin-top: 0; }
 
-/* Topbar filter button — sekarang tampilkan periode */
 .topbar-filter-btn { min-width: 0; }
 .topbar-filter-btn span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 
-/* Mobile refinements */
 @media (max-width: 640px) {
   .mg-value { font-size: 17px; }
   .metric-groups { grid-template-columns: 1fr; }
@@ -1293,11 +1231,6 @@ a:hover { text-decoration: underline; }
   .topbar-filter-btn span { max-width: 100px; font-size: 11px; }
 }
 
-/* ============================================================================
-   v7 additions
-   ============================================================================ */
-
-/* Trend tabs (harian / mingguan / bulanan) */
 .trend-tabs {
   display: flex;
   gap: 4px;
@@ -1330,7 +1263,6 @@ a:hover { text-decoration: underline; }
   margin-top: 8px;
 }
 
-/* Sales page sub-filter (2 dropdowns) */
 .sub-filter-2col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1347,7 +1279,6 @@ a:hover { text-decoration: underline; }
 .sub-filter-2col .dropdown-select { width: 100%; }
 .sub-filter-2col .dd-btn { width: 100%; justify-content: space-between; }
 
-/* Storage percentage (large) */
 .storage-pct {
   font-size: 22px;
   font-weight: 500;
@@ -1356,7 +1287,6 @@ a:hover { text-decoration: underline; }
   font-variant-numeric: tabular-nums;
 }
 
-/* Empty note */
 .empty-note {
   color: var(--ink-3);
   font-size: 13px;
@@ -1364,17 +1294,10 @@ a:hover { text-decoration: underline; }
   padding: 20px 8px;
 }
 
-/* Ensure rank rows are clickable on dashboard */
 .rank-row:hover { background: var(--bone); }
 
-/* Dropdown fill width variant (for toko sub-filter) */
 .dropdown-select .dd-btn { display: flex; align-items: center; justify-content: space-between; }
 
-/* ============================================================================
-   v8 additions — Kegiatan (activity) & Komplain (complaint)
-   ============================================================================ */
-
-/* Tombol aksi di atas halaman */
 .action-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1387,7 +1310,6 @@ a:hover { text-decoration: underline; }
 
 .panel-count { font-size: 11px; color: var(--ink-3); font-weight: 500; }
 
-/* ---- Form ---- */
 .form-grid { display: flex; flex-direction: column; gap: 12px; }
 .form-grid-2 { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 560px) {
@@ -1425,9 +1347,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 }
 .form-error[hidden] { display: none; }
 
-/* ---- Searchable dropdown ---- */
-/* [hidden] harus tetap menang: pakai :not([hidden]) supaya menu tidak
-   selalu tampil (display:flex akan menimpa display:none dari [hidden]). */
 .dd-menu[hidden] { display: none; }
 .dd-menu-search:not([hidden]) { display: flex; flex-direction: column; }
 .dd-menu-search { max-height: 300px; overflow: hidden; }
@@ -1454,7 +1373,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 .dd-opt[hidden] { display: none; }
 .dd-btn-empty { color: var(--ink-3); }
 
-/* ---- Daftar kegiatan / komplain ---- */
 .act-row {
   padding: 10px 2px;
   border-bottom: 0.5px solid var(--line);
@@ -1484,7 +1402,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 .cmp-row { cursor: pointer; }
 .cmp-row:hover { background: var(--bone); }
 
-/* Detail komplain: label di atas, isi di bawah (teks panjang) */
 .detail-row-stack {
   display: block;
 }
@@ -1496,7 +1413,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   margin-top: 2px;
 }
 
-/* ---- Kalender kegiatan ---- */
 .acal { margin-top: 4px; }
 .acal-head {
   display: grid;
@@ -1562,7 +1478,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 }
 .acal-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
 
-/* Upload: hasil deteksi jenis file */
 .file-preview-kind {
   font-size: 11px;
   font-weight: 500;
@@ -1578,7 +1493,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   margin-top: 8px;
 }
 
-/* Petunjuk tambahan di dalam kotak error (mis. Apps Script belum di-deploy) */
 .error-box-hint {
   font-size: 11px;
   color: var(--ink-2);
@@ -1588,11 +1502,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   line-height: 1.5;
 }
 
-/* ============================================================================
-   v8.3 — filter toko multi-pilih, tren di pop up detail, rekap komplain
-   ============================================================================ */
-
-/* Sub-filter Penjualan Toko: Regional | Area | Toko */
 .sub-filter-3col { grid-template-columns: 1fr 1fr; }
 .sub-filter-3col > div:last-child { grid-column: 1 / -1; }
 @media (min-width: 560px) {
@@ -1600,7 +1509,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   .sub-filter-3col > div:last-child { grid-column: auto; }
 }
 
-/* ---- Dropdown multi-pilih (checkbox) ---- */
 .dd-opt-check {
   display: flex;
   align-items: center;
@@ -1649,7 +1557,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 }
 .dd-bulk button:hover { border-color: var(--sea); color: var(--sea); }
 
-/* ---- Tren di dalam pop up detail ---- */
 .detail-trend-head {
   display: flex;
   align-items: center;
@@ -1668,16 +1575,13 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 #detailTrend[hidden] { display: none; }
 #detailTrend .chart-wrap { margin-top: 8px; }
 
-/* ---- Rekap komplain per toko ---- */
 .cmp-total-cell { font-weight: 600; }
 .stbl td.cmp-zero { color: var(--ink-3); }
 .rank-count { font-weight: 500; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .rank-count-unit { font-size: 10px; color: var(--ink-3); font-weight: 400; margin-left: 3px; }
 
-/* Kalender kegiatan inline: sedikit lebih lega dari versi modal */
 .page[data-page="activity"] .acal-cell { min-height: 52px; }
 
-/* Kelompok chip di kanan panel-head (jumlah, urutan, kolom) */
 .panel-head-right {
   display: flex;
   align-items: center;
@@ -1685,12 +1589,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   flex-shrink: 0;
 }
 
-/* ============================================================================
-   Tabel lebar di layar HP
-   ============================================================================ */
-
-/* Kolom nama ikut menempel saat tabel digeser ke samping, supaya baris
-   yang sedang dilihat tetap jelas milik toko/area/regional yang mana. */
 .stbl th:first-child,
 .stbl td:first-child {
   position: sticky;
@@ -1702,7 +1600,6 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 .stbl th:first-child { background: var(--bone); z-index: 3; }
 .stbl tbody tr:hover td:first-child { background: var(--bone); }
 
-/* Petunjuk geser — hanya perlu saat layar sempit */
 .stbl-hint {
   font-size: 10px;
   color: var(--ink-3);
@@ -1710,3 +1607,54 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   margin-top: 8px;
 }
 @media (min-width: 720px) { .stbl-hint { display: none; } }
+
+.metric-hero-netto {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+
+.chip-export {
+  background: var(--sea);
+  color: #fff;
+  border-color: var(--sea);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 6px 12px;
+}
+.chip-export:hover { background: var(--sea-hover); color: #fff; border-color: var(--sea-hover); }
+
+.export-label {
+  font-size: 11px;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 10px 0 6px;
+}
+.export-formats, .export-dests {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.export-fmt {
+  flex: 1 1 0;
+  min-width: 72px;
+  background: var(--bone);
+  border: 0.5px solid var(--line-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.export-fmt:hover { background: var(--sea-2); color: var(--sea); border-color: var(--sea-3); }
+.export-dests .btn { flex: 1 1 0; min-width: 96px; }
+.export-status {
+  font-size: 12px;
+  color: var(--ink-2);
+  min-height: 18px;
+  margin-top: 10px;
+}

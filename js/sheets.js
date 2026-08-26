@@ -36,16 +36,13 @@ const Sheets = {
   async checkDuplicate(pairs) { return (await this._post({ action: 'checkDuplicate', pairs })).data; },
   async upload(rows)          { return (await this._post({ action: 'upload', rows })).data; },
 
-  // ===== Kegiatan =====
   async fetchActivities()  { return (await this._get('fetchKegiatan')).data; },
   async addActivity(row)   { return (await this._post({ action: 'addKegiatan', row })).data; },
 
-  // ===== Komplain =====
   async fetchComplaints()  { return (await this._get('fetchKomplain')).data; },
   async addComplaint(row)  { return (await this._post({ action: 'addKomplain', row })).data; },
   async uploadComplaints(rows)         { return (await this._post({ action: 'uploadKomplain', rows })).data; },
 
-  // ===== Cache helpers =====
   saveCache(data, regional, status) {
     try {
       localStorage.setItem(this.CACHE_KEY_DATA, JSON.stringify({ ts: Date.now(), data }));
@@ -75,7 +72,6 @@ const Sheets = {
     localStorage.removeItem(this.CACHE_KEY_COMPLAINT);
   },
 
-  // ===== Generic list cache (kegiatan / komplain) =====
   saveList(key, rows) {
     try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: rows })); }
     catch (e) { console.warn('Cache save failed:', e); }

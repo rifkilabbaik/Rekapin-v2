@@ -67,12 +67,12 @@
 
   <main class="container">
 
-    <!-- DASHBOARD -->
     <section class="page active" data-page="dashboard">
       <div class="metric-hero" id="mcTotal">
         <div class="metric-hero-label" data-i18n="total_sales">Total penjualan</div>
         <div class="metric-hero-value" id="mvTotal">—</div>
         <div class="metric-hero-growth" id="mvTotalGrowth">—</div>
+        <div class="metric-hero-netto" id="mvNetto">—</div>
         <div class="metric-hero-hint" data-i18n="click_for_detail">Klik untuk detail</div>
       </div>
 
@@ -94,7 +94,6 @@
         <div id="areaList" class="rank-list"></div>
       </div>
 
-      <!-- Trend (harian/mingguan/bulanan tabs) -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="trend_title">Tren</div>
@@ -119,7 +118,6 @@
         </div>
       </div>
 
-      <!-- 10 toko dengan komplain tertinggi (periode sama dengan penjualan) -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="top10_cmp">10 Toko komplain tertinggi</div>
@@ -129,39 +127,38 @@
       </div>
     </section>
 
-    <!-- SALES: 3 sections stacked -->
     <section class="page" data-page="sales">
-      <!-- Regional section -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="sales_regional">Penjualan Regional</div>
           <div class="panel-head-right">
             <button class="sort-chip" id="viewSalesRegional" data-mode="simple">Simpel ▾</button>
             <button class="sort-chip" id="sortSalesRegional" data-mode="desc">Terbesar ▾</button>
+            <button class="sort-chip chip-export" id="exportSalesRegional">Export ▾</button>
           </div>
         </div>
         <div id="salesRegionalTable"></div>
       </div>
 
-      <!-- Area section -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="sales_area">Penjualan Area</div>
           <div class="panel-head-right">
             <button class="sort-chip" id="viewSalesArea" data-mode="simple">Simpel ▾</button>
             <button class="sort-chip" id="sortSalesArea" data-mode="desc">Terbesar ▾</button>
+            <button class="sort-chip chip-export" id="exportSalesArea">Export ▾</button>
           </div>
         </div>
         <div id="salesAreaTable"></div>
       </div>
 
-      <!-- Toko section -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="sales_store">Penjualan Toko</div>
           <div class="panel-head-right">
             <button class="sort-chip" id="viewSalesToko" data-mode="simple">Simpel ▾</button>
             <button class="sort-chip" id="sortSalesToko" data-mode="desc">Terbesar ▾</button>
+            <button class="sort-chip chip-export" id="exportSalesToko">Export ▾</button>
           </div>
         </div>
         <div class="sub-filter-2col sub-filter-3col">
@@ -182,7 +179,6 @@
       </div>
     </section>
 
-    <!-- KEGIATAN -->
     <section class="page" data-page="activity">
       <div class="panel">
         <div class="action-grid">
@@ -190,7 +186,6 @@
         </div>
       </div>
 
-      <!-- Kalender kegiatan tampil langsung (bukan tombol) -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="act_calendar">Kalender kegiatan</div>
@@ -209,7 +204,6 @@
       </div>
     </section>
 
-    <!-- KOMPLAIN -->
     <section class="page" data-page="complaint">
       <div class="panel">
         <div class="action-grid">
@@ -217,13 +211,13 @@
         </div>
       </div>
 
-      <!-- Rekap komplain semua toko per kategori -->
       <div class="panel">
         <div class="panel-head">
           <div class="panel-label" data-i18n="cmp_per_store">Komplain per toko</div>
           <div class="panel-head-right">
             <div class="panel-count" id="cmpCount">—</div>
             <button class="sort-chip" id="sortCmpStore" data-mode="desc">Terbanyak ▾</button>
+            <button class="sort-chip chip-export" id="exportCmp">Export ▾</button>
           </div>
         </div>
         <div id="cmpStoreTable"></div>
@@ -231,7 +225,6 @@
       </div>
     </section>
 
-    <!-- SETTINGS -->
     <section class="page" data-page="settings">
       <div class="panel">
         <div class="setting-label" data-i18n="setting_theme">Tema</div>
@@ -286,7 +279,6 @@
       </div>
     </section>
 
-    <!-- UPLOAD page (was modal, now a menu page) -->
     <section class="page" data-page="upload">
       <div class="panel">
         <div class="setting-label" data-i18n="upload_title">Upload data</div>
@@ -295,7 +287,7 @@
           <div class="dropzone-title" data-i18n="upload_drag">Tarik file ke sini</div>
           <div class="dropzone-or" data-i18n="upload_or">atau</div>
           <button class="btn" id="btnPickFile" data-i18n="upload_pick">Pilih file .xlsx</button>
-          <input type="file" id="fileInput" accept=".xlsx,.xls" hidden />
+          <input type="file" id="fileInput" accept=".xlsx,.xls,.html,.htm" multiple hidden />
         </div>
 
         <div id="filePreview" hidden></div>
@@ -306,7 +298,6 @@
     </section>
   </main>
 
-  <!-- FILTER (PERIODE) MODAL -->
   <div class="modal" id="filterModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -321,7 +312,6 @@
         <input type="hidden" id="fTo" />
       </div>
 
-      <!-- Filter tambahan sesuai halaman (kegiatan / komplain) -->
       <div id="filterExtra"></div>
 
       <div class="modal-actions">
@@ -331,7 +321,6 @@
     </div>
   </div>
 
-  <!-- DATE RANGE POPUP -->
   <div class="modal" id="rangeModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card" style="max-width:340px;">
@@ -348,7 +337,6 @@
     </div>
   </div>
 
-  <!-- METRIC DETAIL MODAL (no X) -->
   <div class="modal" id="detailModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -371,7 +359,6 @@
     </div>
   </div>
 
-  <!-- TREND COMPARE MODAL -->
   <div class="modal" id="trendModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card" style="max-width:520px;">
@@ -383,7 +370,6 @@
     </div>
   </div>
 
-  <!-- KEGIATAN: FORM TAMBAH -->
   <div class="modal" id="actFormModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -417,7 +403,6 @@
     </div>
   </div>
 
-  <!-- KEGIATAN: DETAIL PER TANGGAL -->
   <div class="modal" id="actDayModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -431,7 +416,6 @@
     </div>
   </div>
 
-  <!-- KOMPLAIN: FORM TAMBAH -->
   <div class="modal" id="cmpFormModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -480,7 +464,6 @@
     </div>
   </div>
 
-  <!-- KOMPLAIN: DETAIL -->
   <div class="modal" id="cmpDetailModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-card">
@@ -494,18 +477,45 @@
     </div>
   </div>
 
+  <div class="modal" id="exportModal" hidden>
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title" id="exportTitle">Export data</div>
+      </div>
+      <div class="modal-sub" id="exportSub"></div>
+      <div class="export-label" data-i18n="export_format">Format file</div>
+      <div class="export-formats" id="exportFormats"></div>
+      <div class="export-status" id="exportStatus"></div>
+      <div id="exportStep2" hidden>
+        <div class="export-label" id="exportDestLabel">Kirim ke</div>
+        <div class="export-dests" id="exportDests"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" data-close-modal data-i18n="close">Tutup</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" hidden></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="js/config.js"></script>
-  <script src="js/sheets.js"></script>
-  <script src="js/upload.js"></script>
-  <script src="js/app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+</script>
+  <script src="js/config.js">
+</script>
+  <script src="js/sheets.js">
+</script>
+  <script src="js/upload.js">
+</script>
+  <script src="js/export.js">
+</script>
+  <script src="js/app.js">
+</script>
 
   <script>
-    // Kalau service worker versi baru mengambil alih, halaman di-refresh sekali
-    // supaya HTML/CSS/JS yang dipakai tidak campur versi lama & baru.
+
     if ('serviceWorker' in navigator) {
       const hadController = !!navigator.serviceWorker.controller;
       let reloaded = false;
@@ -520,6 +530,6 @@
           .catch(() => {});
       });
     }
-  </script>
+</script>
 </body>
 </html>
