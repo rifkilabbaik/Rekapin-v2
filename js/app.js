@@ -16,6 +16,7 @@ const App = {
   filtered: [], filteredPrev: [], _prevRange: { from:'', to:'' },
   charts: {},
 
+  accessRegionals: [],
   moneyFormat: 'auto',
   palette: 'krem_biru',
   fontFamily: 'default',
@@ -75,6 +76,7 @@ const App = {
       this.applied = { ...this.filter };
       this._computeFiltered();
       this._renderAll();
+      this._safe('accessDropdown', () => this._buildAccessDropdown());
       this._splashHide();
       this._toast(this.t('toast_cache_loading'));
       this.loadAll(true);
@@ -88,6 +90,7 @@ const App = {
   },
 
   _loadSettings() {
+    this._loadAccessRegionals();
     this.moneyFormat = localStorage.getItem('moneyFormat') || 'auto';
     if (!['auto','full'].includes(this.moneyFormat)) this.moneyFormat = 'auto';
     this.palette = localStorage.getItem('palette') || 'krem_biru';
@@ -115,6 +118,42 @@ const App = {
     if (!['daily','weekly','yearly'].includes(this.detailTrendView)) this.detailTrendView = 'daily';
   },
   _save(k, v) { localStorage.setItem(k, v); },
+  _loadAccessRegionals() {
+    try {
+      const raw = localStorage.getItem('accessRegionals');
+      const arr = raw ? JSON.parse(raw) : [];
+      this.accessRegionals = Array.isArray(arr) ? arr.filter(Boolean) : [];
+    } catch { this.accessRegionals = []; }
+  },
+  _saveAccessRegionals() {
+    this._save('accessRegionals', JSON.stringify(this.accessRegionals));
+  },
+
+  _allRegionals() {
+    return Array.from(new Set((this.regional || []).map(r => r.regional).filter(Boolean))).sort();
+  },
+  _allowedRegionals() {
+    const all = this._allRegionals();
+    if (!this.accessRegionals.length) return all;
+    const hit = all.filter(r => this.accessRegionals.indexOf(r) >= 0);
+    return hit.length ? hit : all;
+  },
+  _regionalScoped() { return this._allowedRegionals().length === 1; },
+  _regionalAllowed(reg) {
+    if (!this.accessRegionals.length) return true;
+    return this._allowedRegionals().indexOf(reg) >= 0;
+  },
+  _branchAllowed(branch) {
+    if (!this.accessRegionals.length) return true;
+    const m = this.branchMeta[branch];
+    return !!m && this._regionalAllowed(m.regional);
+  },
+  _applyAccessRegionals() {
+    this._buildBranchMeta();
+    this._computeFiltered();
+    this._renderAll();
+    this._renderTokoDropdowns();
+  },
 
   _setText(id, text) {
     const el = document.getElementById(id);
@@ -273,6 +312,7 @@ const App = {
 
       const storeOpts = this._storeOptions(true);
       Array.from(new Set(this.activities.map(a => a.store).filter(Boolean)))
+        .filter(s => this._branchAllowed(s))
         .forEach(s => { if (!storeOpts[s]) storeOpts[s] = this._short(s); });
       if (d.store && !storeOpts[d.store]) storeOpts[d.store] = this._short(d.store);
       this._initDropdown('fltActStore', storeOpts, d.store, (v) => { d.store = v; this._updateCancelResetBtn(); }, { search: true });
@@ -284,26 +324,30 @@ const App = {
       return;
     }
 
-    wrap.innerHTML = row(this.t('regional'), 'fltCmpRegional')
+    const scoped = this._regionalScoped();
+    if (scoped) d.regional = '';
+    wrap.innerHTML = (scoped ? '' : row(this.t('regional'), 'fltCmpRegional'))
                    + row(this.t('area'), 'fltCmpArea')
                    + row(this.t('cmp_store'), 'fltCmpStore')
                    + row(this.t('cmp_category'), 'fltCmpCategory');
 
-    const regOpts = { '': this.t('all') };
-    Array.from(new Set((this.regional || []).map(r => r.regional).filter(Boolean)))
-      .sort().forEach(r => { regOpts[r] = r; });
-    if (d.regional && !regOpts[d.regional]) regOpts[d.regional] = d.regional;
-    this._initDropdown('fltCmpRegional', regOpts, d.regional, (v) => {
-      d.regional = v;
+    if (!scoped) {
+      const regOpts = { '': this.t('all') };
+      this._allowedRegionals().forEach(r => { regOpts[r] = r; });
+      if (d.regional && !regOpts[d.regional]) regOpts[d.regional] = d.regional;
+      this._initDropdown('fltCmpRegional', regOpts, d.regional, (v) => {
+        d.regional = v;
 
-      if (v && d.area && this.areaToRegional[d.area] !== v) d.area = '';
-      if (v && d.store && !this._storeInScope(d.store, v, d.area)) d.store = '';
-      this._renderFilterExtra();
-      this._updateCancelResetBtn();
-    }, { search: true });
+        if (v && d.area && this.areaToRegional[d.area] !== v) d.area = '';
+        if (v && d.store && !this._storeInScope(d.store, v, d.area)) d.store = '';
+        this._renderFilterExtra();
+        this._updateCancelResetBtn();
+      }, { search: true });
+    }
 
     const areaOpts = { '': this.t('all') };
     Array.from(new Set((this.regional || [])
+      .filter(r => this._regionalAllowed(r.regional))
       .filter(r => !d.regional || r.regional === d.regional)
       .map(r => r.area).filter(Boolean)))
       .sort().forEach(a => { areaOpts[a] = a; });
@@ -324,6 +368,7 @@ const App = {
 
     if (!d.regional && !d.area) {
       Array.from(new Set(this.complaints.map(c => c.store).filter(Boolean)))
+        .filter(s => this._branchAllowed(s))
         .forEach(s => { if (!storeOpts[s]) storeOpts[s] = this._short(s); });
     }
     if (d.store && !storeOpts[d.store]) storeOpts[d.store] = this._short(d.store);
@@ -515,6 +560,7 @@ const App = {
       this._computeFiltered();
       this._renderAll();
       this._updatePeriodLabel();
+      this._safe('accessDropdown', () => this._buildAccessDropdown());
       this._splashHide();
     } catch (e) {
       if (!silent) this._splash(this.t('splash_failed', { msg: e.message }));
@@ -527,10 +573,10 @@ const App = {
     this.areaToRegional = {}; this.regionalToAreas = {};
     this.regional.forEach(r => {
       this.branchMeta[r.branch] = { regional: r.regional, area: r.area };
-      this.activeBranches.push(r.branch);
       this.areaToRegional[r.area] = r.regional;
       (this.regionalToAreas[r.regional] = this.regionalToAreas[r.regional] || []).push(r.area);
     });
+    this.regional.forEach(r => { if (this._regionalAllowed(r.regional)) this.activeBranches.push(r.branch); });
 
     this._buildStoreIndex();
     this.complaints = this._normStores(this.complaints);
@@ -546,9 +592,9 @@ const App = {
 
   _computeFiltered() {
     const a = this.applied;
-    this.filtered = this.data.filter(r => (!a.from || r.date >= a.from) && (!a.to || r.date <= a.to));
+    this.filtered = this.data.filter(r => this._branchAllowed(r.branch) && (!a.from || r.date >= a.from) && (!a.to || r.date <= a.to));
     const prev = this._prevMonthRange(a.from, a.to);
-    this.filteredPrev = this.data.filter(r => r.date >= prev.from && r.date <= prev.to);
+    this.filteredPrev = this.data.filter(r => this._branchAllowed(r.branch) && r.date >= prev.from && r.date <= prev.to);
     this._prevRange = prev;
   },
 
@@ -655,6 +701,9 @@ const App = {
     this._setText('mvNetto', this.t('netto') + ': ' + this._fmtRp(this._sumNetto(this.filtered)));
     document.querySelector('#mcTotal .metric-hero-hint').textContent = this.t('click_for_detail');
 
+    const scoped = this._regionalScoped();
+    const panelReg = document.getElementById('panelRegional');
+    if (panelReg) panelReg.hidden = scoped;
     this._safe('metricGroups', () => this._renderMetricGroups());
     this._safe('regionalList', () => this._renderRegionalList());
     this._safe('areaList',     () => this._renderAreaList());
@@ -1196,6 +1245,12 @@ const App = {
   _viewLabel(mode) { return mode === 'full' ? this.t('view_full') : this.t('view_simple'); },
 
   _renderSales() {
+    const scoped = this._regionalScoped();
+    const panel = document.getElementById('panelSalesRegional');
+    if (panel) panel.hidden = scoped;
+    const wrap = document.getElementById('tokoRegionalWrap');
+    if (wrap) wrap.hidden = scoped;
+    if (scoped) this.tokoRegional = '';
     this._renderSalesRegional();
     this._renderSalesArea();
     this._renderTokoDropdowns();
@@ -1396,7 +1451,7 @@ const App = {
   _renderTokoDropdowns() {
     this._renderTokoStoreDropdown();
     if (!this.regional || this.regional.length === 0) return;
-    const regs = Array.from(new Set(this.regional.map(r => r.regional))).sort();
+    const regs = this._allowedRegionals();
     const regOpts = { '': this.t('all') };
     regs.forEach(r => { regOpts[r] = r; });
     this._initDropdown('tokoRegional', regOpts, this.tokoRegional, (v) => {
@@ -1409,10 +1464,10 @@ const App = {
       this._renderTokoDropdowns();
       this._renderSalesToko();
     });
-    const areas = (this.tokoRegional
-      ? Array.from(new Set(this.regional.filter(r => r.regional === this.tokoRegional).map(r => r.area)))
-      : Array.from(new Set(this.regional.map(r => r.area)))
-    ).sort();
+    const areas = Array.from(new Set(this.regional
+      .filter(r => this._regionalAllowed(r.regional))
+      .filter(r => !this.tokoRegional || r.regional === this.tokoRegional)
+      .map(r => r.area).filter(Boolean))).sort();
     const areaOpts = { '': this.t('all') };
     areas.forEach(a => { areaOpts[a] = a; });
     this._initDropdown('tokoArea', areaOpts, this.tokoArea, (v) => {
@@ -1484,11 +1539,28 @@ const App = {
     this._initDropdown('money', moneyOpts, this.moneyFormat, (v) => {
       this.moneyFormat = v; this._save('moneyFormat', v); this._renderAll();
     });
+    this._buildAccessDropdown();
+
     const fontOpts = {};
     Object.entries(CONFIG.FONT_OPTIONS).forEach(([k, v]) => { fontOpts[k] = { label: this._loc(v.label), stack: v.stack }; });
     this._initDropdown('font', fontOpts, this.fontFamily, (v) => {
       this.fontFamily = v; this._save('fontFamily', v); this._applyFont();
     });
+  },
+
+  _buildAccessDropdown() {
+    const accessOpts = {};
+    this._allRegionals().forEach(r => { accessOpts[r] = r; });
+    const known = this.accessRegionals.filter(r => accessOpts[r] !== undefined);
+    if (known.length !== this.accessRegionals.length && this._allRegionals().length) {
+      this.accessRegionals = known;
+      this._saveAccessRegionals();
+    }
+    this._initMultiDropdown('accessRegionals', accessOpts, this.accessRegionals, (vals) => {
+      this.accessRegionals = vals;
+      this._saveAccessRegionals();
+      this._applyAccessRegionals();
+    }, { search: true, allLabel: this.t('dd_all_regionals') });
   },
 
   _renderSettings() {
@@ -1927,6 +1999,7 @@ const App = {
     const f = this.actFilter;
     const p = this._period();
     return this.activities.filter(a => {
+      if (!this._branchAllowed(a.store)) return false;
       if (!this._inRange(a.date, p.from, p.to)) return false;
       if (f.name && a.name !== f.name) return false;
       if (f.store && a.store !== f.store) return false;
@@ -1938,6 +2011,7 @@ const App = {
   _activitiesForCalendar() {
     const f = this.actFilter;
     return this.activities.filter(a => {
+      if (!this._branchAllowed(a.store)) return false;
       if (f.name && a.name !== f.name) return false;
       if (f.store && a.store !== f.store) return false;
       if (f.type && a.type !== f.type) return false;
@@ -2213,7 +2287,7 @@ const App = {
 
   _complaintsInPeriod() {
     const p = this._period();
-    return this.complaints.filter(c => this._inRange(c.trxDate, p.from, p.to));
+    return this.complaints.filter(c => this._branchAllowed(c.store) && this._inRange(c.trxDate, p.from, p.to));
   },
 
   _filteredComplaints() {

@@ -1658,3 +1658,10 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   min-height: 18px;
   margin-top: 10px;
 }
+
+.setting-note {
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-top: 8px;
+  line-height: 1.5;
+}
