@@ -485,20 +485,46 @@
 
   <div class="modal" id="exportModal" hidden>
     <div class="modal-backdrop" data-close-modal></div>
-    <div class="modal-card">
-      <div class="modal-header">
-        <div class="modal-title" id="exportTitle">Export data</div>
+    <div class="modal-card export-card">
+      <div class="export-head">
+        <div>
+          <div class="modal-title" id="exportTitle">Export data</div>
+          <div class="export-sub" id="exportSub"></div>
+        </div>
       </div>
-      <div class="modal-sub" id="exportSub"></div>
-      <div class="export-label" data-i18n="export_format">Format file</div>
-      <div class="export-formats" id="exportFormats"></div>
+
+      <div class="export-section">
+        <div class="export-label" data-i18n="export_mode">Rekap</div>
+        <div class="export-seg" id="exportModes"></div>
+      </div>
+
+      <div class="export-section">
+        <div class="export-label-row">
+          <div class="export-label" data-i18n="export_columns">Kolom</div>
+          <div class="export-mini-row">
+            <button class="export-mini" data-pick="default" data-i18n="export_pick_default">Bawaan</button>
+            <button class="export-mini" data-pick="all" data-i18n="export_pick_all">Semua</button>
+          </div>
+        </div>
+        <div class="export-chips" id="exportCols"></div>
+        <div class="export-summary" id="exportSummary"></div>
+      </div>
+
+      <div class="export-section">
+        <div class="export-label" data-i18n="export_format">Format file</div>
+        <div class="export-formats" id="exportFormats"></div>
+      </div>
+
       <div class="export-status" id="exportStatus"></div>
+
       <div id="exportStep2" hidden>
+        <div class="export-file" id="exportFileName"></div>
         <div class="export-label" id="exportDestLabel">Kirim ke</div>
         <div class="export-dests" id="exportDests"></div>
       </div>
+
       <div class="modal-actions">
-        <button class="btn btn-primary" data-close-modal data-i18n="close">Tutup</button>
+        <button class="btn" data-close-modal data-i18n="close">Tutup</button>
       </div>
     </div>
   </div>

@@ -1227,7 +1227,7 @@ const App = {
       ['exportSalesArea',     'area'],
       ['exportSalesToko',     'branch']
     ].forEach(([btnId, level]) => {
-      this._on(btnId, 'click', () => Exporter.open(this._salesDataset(level)));
+      this._on(btnId, 'click', () => Exporter.open(this._salesExportSpec(level)));
     });
 
     [
@@ -1294,35 +1294,43 @@ const App = {
       if (level === 'area') return m ? m.area : null;
       return m ? m.regional : null;
     };
-    const keys = CONFIG.SALES_FIELDS.map(f => f.key);
-    const groups = {};
-    const ensure = (k) => {
-      if (!groups[k]) {
-        groups[k] = { key: k, prev: 0, vals: {} };
-        keys.forEach(x => { groups[k].vals[x] = 0; });
-      }
-      return groups[k];
-    };
-    this.filtered.forEach(r => {
-      const k = getKey(r);
-      if (!k) return;
-      const g = ensure(k);
-      keys.forEach(x => { g.vals[x] += Number(r[x]) || 0; });
-    });
+    const vals = this._groupSales(this.filtered, level);
+    const prev = {};
     this.filteredPrev.forEach(r => {
       const k = getKey(r);
       if (!k) return;
-      ensure(k).prev += Number(r.bruto) || 0;
+      prev[k] = (prev[k] || 0) + (Number(r.bruto) || 0);
     });
-    return Object.values(groups).map(g => ({
-      key: g.key,
-      vals: g.vals,
-      netto: this._nettoOf(g.vals),
-      total: g.vals.bruto,
-      prev: g.prev,
-      growth: this._growthPct(g.vals.bruto, g.prev),
-      val: g.vals.bruto
+    return Object.keys(vals).map(k => ({
+      key: k,
+      vals: vals[k],
+      netto: this._nettoOf(vals[k]),
+      total: vals[k].bruto,
+      prev: prev[k] || 0,
+      growth: this._growthPct(vals[k].bruto, prev[k] || 0),
+      val: vals[k].bruto
     }));
+  },
+
+  _groupSales(records, level) {
+    const keys = CONFIG.SALES_FIELDS.map(f => f.key);
+    const groups = {};
+    records.forEach(r => {
+      const m = this.branchMeta[r.branch];
+      const k = level === 'branch' ? r.branch : level === 'area' ? (m ? m.area : null) : (m ? m.regional : null);
+      if (!k) return;
+      if (!groups[k]) {
+        groups[k] = {};
+        keys.forEach(x => { groups[k][x] = 0; });
+      }
+      keys.forEach(x => { groups[k][x] += Number(r[x]) || 0; });
+    });
+    return groups;
+  },
+
+  _fieldType(key) {
+    const f = CONFIG.SALES_FIELDS.find(x => x.key === key);
+    return f && f.type === 'count' ? 'num' : 'money';
   },
 
   _sortAndRender(rows, sortMode, containerId, level, viewMode) {
@@ -1395,57 +1403,116 @@ const App = {
     return clean + '_' + d(p.from) + '-' + d(p.to);
   },
 
-  _salesDataset(level) {
+  _salesExportSpec(level) {
     const view = this._salesView[level];
     if (!view || view.rows.length === 0) return null;
-    const cols = this._salesColumns(view.viewMode);
     const title = this._levelTitle(level);
-    const columns = [{ label: this.t('tbl_name'), type: 'text' }]
-      .concat(cols.map(c => ({ label: c.label, type: 'money' })))
-      .concat([{ label: this.t('tbl_growth'), type: 'text' }]);
-    const rows = view.rows.map(r => [level === 'branch' ? this._short(r.key) : r.key]
-      .concat(cols.map(c => this._colValue(r, c)))
-      .concat([r.growth === null ? '-' : (r.growth >= 0 ? '+' : '') + r.growth.toFixed(1) + '%']));
-    const bruto = view.rows.reduce((sum, r) => sum + r.vals.bruto, 0);
-    const netto = view.rows.reduce((sum, r) => sum + r.netto, 0);
+    const extra = CONFIG.SALES_FIELDS.map(f => f.key).filter(k => CONFIG.SALES_TABLE_KEYS.indexOf(k) < 0);
+    const order = CONFIG.SALES_TABLE_KEYS.concat(extra);
     return {
       title,
       period: this._rangeText(this._period()),
       sheetName: title,
       fileBase: this._fileBase(title),
       unit: this.t('rows_suffix'),
-      totals: [
-        { label: this.t('bruto'), value: bruto, text: Math.round(bruto).toLocaleString('id-ID') },
-        { label: this.t('netto'), value: netto, text: Math.round(netto).toLocaleString('id-ID') }
-      ],
-      columns,
-      rows
+      columns: order.map(k => ({ key: k, label: this._fieldLabel(k), type: this._fieldType(k) })),
+      defaultKeys: CONFIG.SALES_TABLE_KEYS.slice(),
+      buildRows: (o) => this._salesExportRows(level, o)
     };
   },
 
-  _complaintDataset() {
+  _salesExportRows(level, o) {
+    const view = this._salesView[level];
+    const isBranch = level === 'branch';
+    const nameOf = (k) => (isBranch ? this._short(k) : k);
+    const cols = o.keys.map(k => ({ key: k, label: this._fieldLabel(k), type: this._fieldType(k) }));
+    const bruto = view.rows.reduce((sum, r) => sum + r.vals.bruto, 0);
+    const netto = view.rows.reduce((sum, r) => sum + r.netto, 0);
+    const money = (v) => Math.round(v).toLocaleString('id-ID');
+    const totals = [
+      { label: this.t('bruto'), value: bruto, text: money(bruto) },
+      { label: this.t('netto'), value: netto, text: money(netto) }
+    ];
+
+    if (o.mode === 'daily') {
+      const columns = [{ label: this.t('export_col_date'), type: 'text' }, { label: this.t('tbl_name'), type: 'text' }]
+        .concat(cols.map(c => ({ label: c.label, type: c.type })));
+      const rank = {};
+      view.rows.forEach((r, i) => { rank[r.key] = i; });
+      const rows = [];
+      Array.from(new Set(this.filtered.map(r => r.date))).sort().forEach(d => {
+        const groups = this._groupSales(this.filtered.filter(r => r.date === d), level);
+        Object.keys(groups)
+          .filter(k => rank[k] !== undefined)
+          .sort((a, b) => rank[a] - rank[b])
+          .forEach(k => {
+            rows.push([this._formatDMY(d), nameOf(k)].concat(cols.map(c => Number(groups[k][c.key]) || 0)));
+          });
+      });
+      return { columns, rows, totals };
+    }
+
+    const columns = [{ label: this.t('tbl_name'), type: 'text' }]
+      .concat(cols.map(c => ({ label: c.label, type: c.type })))
+      .concat([{ label: this.t('tbl_growth'), type: 'text' }]);
+    const rows = view.rows.map(r => [nameOf(r.key)]
+      .concat(cols.map(c => Number(r.vals[c.key]) || 0))
+      .concat([r.growth === null ? '-' : (r.growth >= 0 ? '+' : '') + r.growth.toFixed(1) + '%']));
+    return { columns, rows, totals };
+  },
+
+  _complaintExportSpec() {
     const view = this._cmpView;
     if (!view || view.rows.length === 0) return null;
     const title = this.t('cmp_per_store');
-    const columns = [{ label: this.t('tbl_name'), type: 'text' }, { label: this.t('tbl_total'), type: 'num' }]
-      .concat(view.cats.map(c => ({ label: c, type: 'num' })));
-    if (view.showOther) columns.push({ label: this.t('cmp_other_cat'), type: 'num' });
-    const rows = view.rows.map(r => {
-      const line = [this._short(r.key), r.total].concat(view.cats.map(c => r.cats[c]));
-      if (view.showOther) line.push(r.other);
-      return line;
-    });
-    const total = view.rows.reduce((s, r) => s + r.total, 0);
+    const columns = [{ key: '__total', label: this.t('tbl_total'), type: 'num' }]
+      .concat(view.cats.map(c => ({ key: c, label: c, type: 'num' })));
+    if (view.showOther) columns.push({ key: '__other', label: this.t('cmp_other_cat'), type: 'num' });
     return {
       title,
       period: this._rangeText(this._period()),
       sheetName: title,
       fileBase: this._fileBase(title),
       unit: this.t('stores_suffix'),
-      totals: [{ label: this.t('tbl_total'), value: total, text: total.toLocaleString('id-ID') }],
       columns,
-      rows
+      defaultKeys: columns.map(c => c.key),
+      buildRows: (o) => this._complaintExportRows(o)
     };
+  },
+
+  _complaintExportRows(o) {
+    const view = this._cmpView;
+    const label = (k) => (k === '__total' ? this.t('tbl_total') : k === '__other' ? this.t('cmp_other_cat') : k);
+    const valOf = (row, k) => (k === '__total' ? row.total : k === '__other' ? row.other : (row.cats[k] || 0));
+    const cols = o.keys.map(k => ({ key: k, label: label(k) }));
+    const total = view.rows.reduce((s, r) => s + r.total, 0);
+    const totals = [{ label: this.t('tbl_total'), value: total, text: total.toLocaleString('id-ID') }];
+
+    if (o.mode === 'daily') {
+      const columns = [{ label: this.t('export_col_date'), type: 'text' }, { label: this.t('tbl_name'), type: 'text' }]
+        .concat(cols.map(c => ({ label: c.label, type: 'num' })));
+      const map = {};
+      this._filteredComplaints().forEach(c => {
+        const d = String(c.trxDate || '').slice(0, 10);
+        const k = d + '|' + c.store;
+        if (!map[k]) {
+          map[k] = { date: d, key: c.store, total: 0, other: 0, cats: {} };
+          view.cats.forEach(x => { map[k].cats[x] = 0; });
+        }
+        map[k].total++;
+        const cc = this._canonCategory(c.category);
+        if (cc) map[k].cats[cc]++; else map[k].other++;
+      });
+      const rows = Object.values(map)
+        .sort((a, b) => a.date.localeCompare(b.date) || this._short(a.key).localeCompare(this._short(b.key)))
+        .map(g => [this._formatDMY(g.date), this._short(g.key)].concat(cols.map(c => valOf(g, c.key))));
+      return { columns, rows, totals };
+    }
+
+    const columns = [{ label: this.t('tbl_name'), type: 'text' }]
+      .concat(cols.map(c => ({ label: c.label, type: 'num' })));
+    const rows = view.rows.map(r => [this._short(r.key)].concat(cols.map(c => valOf(r, c.key))));
+    return { columns, rows, totals };
   },
 
   _renderTokoDropdowns() {
@@ -2218,7 +2285,7 @@ const App = {
       this._save('cmpStoreSort', this.cmpStoreSort);
       this._renderComplaintStoreTable();
     });
-    this._on('exportCmp', 'click', () => Exporter.open(this._complaintDataset()));
+    this._on('exportCmp', 'click', () => Exporter.open(this._complaintExportSpec()));
     this._on('cmpFormSave', 'click', () => this._saveComplaint());
     document.querySelectorAll('#cmpFormModal [data-close-modal], #cmpDetailModal [data-close-modal]')
       .forEach(el => el.addEventListener('click', () => { el.closest('.modal').hidden = true; }));
