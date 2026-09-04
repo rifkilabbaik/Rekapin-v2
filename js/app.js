@@ -1795,29 +1795,15 @@ const App = {
         ${meta.skipped ? `<div class="file-preview-warn">${this._esc(this.t('upload_skipped_rows', { n: meta.skipped }))}</div>` : ''}
       </div>`;
       res.hidden = false;
-      if (isComplaint) {
-        res.innerHTML = `<div class="info-box"><b>${this._esc(this.t('upload_ready_complaint', { n: meta.rowCount.toLocaleString(this._locale()) }))}</b></div>`;
-        actions.hidden = false;
-        actions.innerHTML = `<button class="btn" id="uCancel">${this._esc(this.t('cancel'))}</button><button class="btn btn-primary" id="btnUploadInner">${this._esc(this.t('upload_all'))}</button>`;
-        document.getElementById('btnUploadInner').onclick = () => this._doUpload(false);
-        const cc = document.getElementById('uCancel');
-        if (cc) cc.onclick = () => this._resetUploadUi();
-        return;
+      const num = (v) => v.toLocaleString(this._locale());
+      const lines = [`<b>${this._esc(this.t('upload_ready', { n: num(meta.rowCount) }))}</b>`];
+      if (dup && dup.duplicates > 0) {
+        lines.push(`<div class="upload-split">${this._esc(this.t('upload_split', { a: num(dup.newOnes), b: num(dup.duplicates) }))}</div>`);
       }
-      if (dup.duplicates === 0) {
-        res.innerHTML = `<div class="info-box"><b>${this._esc(this.t('upload_all_new_msg', { n: dup.newOnes.toLocaleString(this._locale()) }))}</b></div>`;
-        actions.hidden = false;
-        actions.innerHTML = `<button class="btn" id="uCancel">${this._esc(this.t('cancel'))}</button><button class="btn btn-primary" id="btnUploadInner">${this._esc(this.t('upload_all'))}</button>`;
-        document.getElementById('btnUploadInner').onclick = () => this._doUpload(false);
-      } else if (dup.newOnes === 0) {
-        res.innerHTML = `<div class="error-box"><div class="error-box-icon">!</div><div><div class="error-box-title">${this._esc(this.t('upload_all_dup_title'))}</div><div class="error-box-msg">${this._esc(this.t('upload_all_dup_msg', { n: dup.duplicates.toLocaleString(this._locale()) }))}</div></div></div>`;
-        actions.innerHTML = '';
-      } else {
-        res.innerHTML = `<div class="warn-box"><b>${this._esc(this.t('upload_partial_title'))}</b><br>• ${this._esc(this.t('upload_partial_new', { n: dup.newOnes.toLocaleString(this._locale()) }))}<br>• ${this._esc(this.t('upload_partial_dup', { n: dup.duplicates.toLocaleString(this._locale()) }))}</div><div style="font-size:12px; color:var(--ink-2); margin-bottom:8px;">${this._esc(this.t('upload_which'))}</div>`;
-        actions.hidden = false;
-        actions.innerHTML = `<button class="btn" id="uCancel">${this._esc(this.t('cancel'))}</button><button class="btn btn-primary" id="btnUploadInner">${this._esc(this.t('upload_new_only', { n: dup.newOnes }))}</button>`;
-        document.getElementById('btnUploadInner').onclick = () => this._doUpload(true);
-      }
+      res.innerHTML = `<div class="info-box">${lines.join('')}</div>`;
+      actions.hidden = false;
+      actions.innerHTML = `<button class="btn" id="uCancel">${this._esc(this.t('cancel'))}</button><button class="btn btn-primary" id="btnUploadInner">${this._esc(this.t('upload_all'))}</button>`;
+      document.getElementById('btnUploadInner').onclick = () => this._doUpload();
       const c = document.getElementById('uCancel');
       if (c) c.onclick = () => this._resetUploadUi();
     } catch (e) {
@@ -1835,7 +1821,7 @@ const App = {
       ${stale ? `<div class="error-box-hint">${this._esc(this.t('upload_redeploy_hint'))}</div>` : ''}
     </div></div>`;
   },
-  async _doUpload(filterDupes) {
+  async _doUpload() {
     if (!this._uploadCtx) return;
     const actions = document.getElementById('uploadActions');
     actions.querySelectorAll('button').forEach(b => b.disabled = true);
@@ -1845,14 +1831,7 @@ const App = {
     };
     const isComplaint = this._uploadCtx.parsed.kind === 'komplain';
     try {
-      let rows = this._uploadCtx.parsed.rows;
-      if (filterDupes && !isComplaint) {
-        setStatus(this.t('upload_filtering'), 10);
-        const full = await Sheets.fetchAll();
-        const existing = new Set(full.map(r => r.date + '|' + r.branch));
-        rows = rows.filter(r => !existing.has(r.date + '|' + r.branch));
-      }
-      if (rows.length === 0) { setStatus(this.t('upload_no_new_row'), 100); setTimeout(() => this._resetUploadUi(), 1200); return; }
+      const rows = this._uploadCtx.parsed.rows;
 
       const CHUNK = isComplaint ? 200 : 500;
       let added = 0, skippedDup = 0;
@@ -1865,17 +1844,15 @@ const App = {
         skippedDup += (res && res.skipped) || 0;
         ((res && res.addedColumns) || []).forEach(c => { if (newCols.indexOf(c) < 0) newCols.push(c); });
       }
-      if (isComplaint) {
-        const parts = [];
-        if (added > 0) parts.push(this.t('upload_done_complaint', { n: added.toLocaleString(this._locale()) }));
-        else parts.push(this.t('upload_none_added'));
-        if (skippedDup > 0) parts.push(this.t('upload_dup_skipped', { n: skippedDup.toLocaleString(this._locale()) }));
-        setStatus(parts.join(' '), 100);
+      const parts = [];
+      if (added > 0) {
+        parts.push(this.t(isComplaint ? 'upload_done_complaint' : 'upload_done', { n: added.toLocaleString(this._locale()) }));
       } else {
-        const parts = [this.t('upload_done', { n: rows.length.toLocaleString(this._locale()) })];
-        if (newCols.length) parts.push(this.t('upload_new_columns', { n: newCols.length, list: newCols.join(', ') }));
-        setStatus(parts.join(' '), 100);
+        parts.push(this.t('upload_none_added'));
       }
+      if (skippedDup > 0) parts.push(this.t('upload_dup_skipped', { n: skippedDup.toLocaleString(this._locale()) }));
+      if (newCols.length) parts.push(this.t('upload_new_columns', { n: newCols.length, list: newCols.join(', ') }));
+      setStatus(parts.join(' '), 100);
       this._toast(this.t('upload_success'));
       Sheets.clearCache();
       setTimeout(() => this._resetUploadUi(), 1200);
