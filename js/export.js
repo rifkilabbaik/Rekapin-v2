@@ -1,6 +1,9 @@
 const Exporter = {
-  _ds: null,
+  _spec: null,
+  _mode: 'summary',
+  _keys: [],
   _file: null,
+  _built: null,
 
   init(app) {
     this.app = app;
@@ -9,25 +12,117 @@ const Exporter = {
     modal.querySelectorAll('[data-close-modal]').forEach(el => {
       el.addEventListener('click', () => { modal.hidden = true; });
     });
+    modal.querySelectorAll('.export-mini').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!this._spec) return;
+        this._keys = btn.dataset.pick === 'all'
+          ? this._spec.columns.map(c => c.key)
+          : this._spec.defaultKeys.slice();
+        this._renderCols();
+        this._reset();
+      });
+    });
   },
 
-  open(dataset) {
+  open(spec) {
     const t = (k, p) => this.app.t(k, p);
-    if (!dataset || dataset.rows.length === 0) { this.app._toast(t('export_empty')); return; }
-    this._ds = dataset;
-    this._file = null;
-    const modal = document.getElementById('exportModal');
+    if (!spec) { this.app._toast(t('export_empty')); return; }
+    this._spec = spec;
+    this._mode = 'summary';
+    this._keys = spec.defaultKeys.slice();
     document.getElementById('exportTitle').textContent = t('export_title');
-    document.getElementById('exportSub').textContent = dataset.title + ' · ' + dataset.period;
-    const fmt = document.getElementById('exportFormats');
-    fmt.innerHTML = CONFIG.EXPORT_FORMATS
-      .map(f => `<button class="export-fmt" data-fmt="${f.key}">${f.label}</button>`).join('');
-    fmt.querySelectorAll('.export-fmt').forEach(btn => {
+    document.getElementById('exportSub').textContent = spec.title + ' · ' + spec.period;
+    this._renderModes();
+    this._renderCols();
+    this._renderFormats();
+    this._reset();
+    document.getElementById('exportModal').hidden = false;
+  },
+
+  _reset() {
+    this._file = null;
+    this._built = null;
+    const status = document.getElementById('exportStatus');
+    status.textContent = '';
+    status.classList.remove('err');
+    document.getElementById('exportStep2').hidden = true;
+    this._renderSummary();
+  },
+
+  _renderModes() {
+    const t = (k, p) => this.app.t(k, p);
+    const box = document.getElementById('exportModes');
+    const modes = [
+      { key: 'summary', label: t('export_mode_summary') },
+      { key: 'daily', label: t('export_mode_daily') }
+    ];
+    box.innerHTML = modes.map(m =>
+      `<button class="export-seg-btn${m.key === this._mode ? ' active' : ''}" data-mode="${m.key}">${this.app._esc(m.label)}</button>`
+    ).join('');
+    box.querySelectorAll('.export-seg-btn').forEach(btn => {
+      btn.onclick = () => {
+        this._mode = btn.dataset.mode;
+        this._renderModes();
+        this._reset();
+      };
+    });
+  },
+
+  _renderCols() {
+    const box = document.getElementById('exportCols');
+    box.innerHTML = this._spec.columns.map(c =>
+      `<button class="export-chip${this._keys.indexOf(c.key) >= 0 ? ' on' : ''}" data-key="${this.app._esc(c.key)}">${this.app._esc(c.label)}</button>`
+    ).join('');
+    box.querySelectorAll('.export-chip').forEach(chip => {
+      chip.onclick = () => {
+        const k = chip.dataset.key;
+        const i = this._keys.indexOf(k);
+        if (i >= 0) this._keys.splice(i, 1); else this._keys.push(k);
+        chip.classList.toggle('on');
+        this._reset();
+      };
+    });
+  },
+
+  _renderFormats() {
+    const box = document.getElementById('exportFormats');
+    box.innerHTML = CONFIG.EXPORT_FORMATS.map(f =>
+      `<button class="export-fmt" data-fmt="${f.key}"><span class="export-fmt-name">${f.label}</span><span class="export-fmt-note">.${f.ext}</span></button>`
+    ).join('');
+    box.querySelectorAll('.export-fmt').forEach(btn => {
       btn.onclick = () => this._build(btn.dataset.fmt);
     });
-    document.getElementById('exportStep2').hidden = true;
-    document.getElementById('exportStatus').textContent = '';
-    modal.hidden = false;
+  },
+
+  _orderedKeys() {
+    return this._spec.columns.map(c => c.key).filter(k => this._keys.indexOf(k) >= 0);
+  },
+
+  _dataset() {
+    const keys = this._orderedKeys();
+    if (!keys.length) return null;
+    const built = this._spec.buildRows({ mode: this._mode, keys });
+    return {
+      title: this._spec.title,
+      period: this._spec.period,
+      sheetName: this._spec.sheetName,
+      unit: this._spec.unit,
+      fileBase: this._spec.fileBase + (this._mode === 'daily' ? '_harian' : ''),
+      columns: built.columns,
+      rows: built.rows,
+      totals: built.totals
+    };
+  },
+
+  _renderSummary() {
+    const el = document.getElementById('exportSummary');
+    const keys = this._orderedKeys();
+    if (!keys.length) { el.textContent = this.app.t('export_need_column'); return; }
+    this._built = this._dataset();
+    el.textContent = this.app.t('export_summary', {
+      r: this._built.rows.length.toLocaleString(this.app._locale()),
+      c: this._built.columns.length
+    });
   },
 
   async _build(fmtKey) {
@@ -35,13 +130,29 @@ const Exporter = {
     const fmt = CONFIG.EXPORT_FORMATS.find(f => f.key === fmtKey);
     const status = document.getElementById('exportStatus');
     const step2 = document.getElementById('exportStep2');
+    const buttons = document.querySelectorAll('.export-fmt');
+    status.classList.remove('err');
+    if (!this._orderedKeys().length) {
+      status.classList.add('err');
+      status.textContent = t('export_need_column');
+      return;
+    }
+    const ds = this._built || this._dataset();
+    if (!ds || ds.rows.length === 0) {
+      status.classList.add('err');
+      status.textContent = t('export_empty');
+      return;
+    }
+    this._ds = ds;
     status.textContent = t('export_generating');
     step2.hidden = true;
+    buttons.forEach(b => b.classList.add('busy'));
     try {
-      const name = this._ds.fileBase + '.' + fmt.ext;
+      const name = ds.fileBase + '.' + fmt.ext;
       const blob = fmtKey === 'xlsx' ? this._xlsx() : fmtKey === 'md' ? this._md() : await this._pdf();
       this._file = new File([blob], name, { type: fmt.mime });
-      status.textContent = t('export_ready', { f: name });
+      status.textContent = t('export_ready', { f: fmt.label });
+      document.getElementById('exportFileName').textContent = name;
       step2.hidden = false;
       document.getElementById('exportDestLabel').textContent = t('export_dest');
       const dests = document.getElementById('exportDests');
@@ -54,7 +165,10 @@ const Exporter = {
         b.onclick = () => this._send(b.dataset.dest);
       });
     } catch (e) {
+      status.classList.add('err');
       status.textContent = t('export_failed', { msg: e.message });
+    } finally {
+      buttons.forEach(b => b.classList.remove('busy'));
     }
   },
 
@@ -104,13 +218,18 @@ const Exporter = {
   _cellText(col, v) {
     if (v == null) return '';
     if (col.type === 'money') return this._money(v);
-    if (col.type === 'num') return Number(v).toLocaleString('id-ID');
+    if (col.type === 'num') return this._num(v);
     return String(v);
   },
 
   _money(v) {
     const n = Math.round(Number(v) || 0);
     return (n < 0 ? '-' : '') + Math.abs(n).toLocaleString('id-ID');
+  },
+
+  _num(v) {
+    const n = Number(v) || 0;
+    return (Math.round(n * 100) / 100).toLocaleString('id-ID');
   },
 
   _xlsx() {
@@ -121,7 +240,7 @@ const Exporter = {
     aoa.push(ds.columns.map(c => c.label));
     ds.rows.forEach(r => aoa.push(r.map((v, i) => (ds.columns[i].type === 'text' ? String(v == null ? '' : v) : Number(v) || 0))));
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = ds.columns.map((c, i) => ({ wch: i === 0 ? 28 : Math.max(12, c.label.length + 2) }));
+    ws['!cols'] = ds.columns.map((c, i) => ({ wch: c.type === 'text' ? Math.max(14, c.label.length + 4) : Math.max(12, c.label.length + 2) }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, ds.sheetName);
     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });

@@ -1624,47 +1624,174 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
 }
 .chip-export:hover { background: var(--sea-hover); color: #fff; border-color: var(--sea-hover); }
 
-.export-label {
-  font-size: 11px;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: 10px 0 6px;
-}
-.export-formats, .export-dests {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.export-fmt {
-  flex: 1 1 0;
-  min-width: 72px;
-  background: var(--bone);
-  border: 0.5px solid var(--line-2);
-  color: var(--ink);
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 600;
-  padding: 12px 10px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 120ms;
-}
-.export-fmt:hover { background: var(--sea-2); color: var(--sea); border-color: var(--sea-3); }
-.export-dests .btn { flex: 1 1 0; min-width: 96px; }
-.export-status {
+.export-card { max-width: 520px; }
+.export-head { margin-bottom: 4px; }
+.export-sub {
   font-size: 12px;
   color: var(--ink-2);
-  min-height: 18px;
+  margin-top: 3px;
+}
+.export-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 0.5px solid var(--line);
+}
+.export-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.export-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.export-mini-row { display: flex; gap: 6px; }
+.export-mini {
+  background: none;
+  border: 0.5px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 10px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.export-mini:hover { background: var(--sea-2); color: var(--sea); border-color: var(--sea-3); }
+
+.export-seg {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 3px;
+  background: var(--bone);
+  border: 0.5px solid var(--line);
+  border-radius: 10px;
+}
+.export-seg-btn {
+  flex: 1 1 0;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 9px 8px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.export-seg-btn.active {
+  background: var(--bone-2);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.export-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  max-height: 156px;
+  overflow-y: auto;
+}
+.export-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bone);
+  border: 0.5px solid var(--line-2);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.export-chip::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  border: 1px solid var(--line-2);
+  background: var(--bone-2);
+  flex: 0 0 auto;
+}
+.export-chip.on {
+  background: var(--sea-2);
+  border-color: var(--sea-3);
+  color: var(--sea);
+  font-weight: 600;
+}
+.export-chip.on::before {
+  background: var(--sea);
+  border-color: var(--sea);
+}
+.export-summary {
+  font-size: 11px;
+  color: var(--ink-3);
   margin-top: 10px;
 }
 
-.setting-note {
-  font-size: 11px;
-  color: var(--ink-3);
+.export-formats {
+  display: flex;
+  gap: 8px;
   margin-top: 8px;
-  line-height: 1.5;
 }
+.export-fmt {
+  flex: 1 1 0;
+  background: var(--bone);
+  border: 0.5px solid var(--line-2);
+  border-radius: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  font-family: inherit;
+  padding: 12px 8px;
+  text-align: center;
+  transition: background 120ms, border-color 120ms, transform 120ms;
+}
+.export-fmt:hover { background: var(--sea-2); border-color: var(--sea-3); transform: translateY(-1px); }
+.export-fmt.busy { opacity: 0.55; pointer-events: none; }
+.export-fmt-name {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.export-fmt-note {
+  display: block;
+  font-size: 10px;
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+.export-status {
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-top: 12px;
+  min-height: 16px;
+}
+.export-status.err { color: var(--loss); }
+.export-file {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--sea-2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 12px;
+  word-break: break-all;
+}
+.export-dests {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.export-dests .btn { flex: 1 1 0; min-width: 96px; }
 
 .upload-split {
   font-size: 12px;
