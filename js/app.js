@@ -1280,8 +1280,8 @@ const App = {
 
   _salesColumns(viewMode) {
     if (viewMode === 'full') {
-      return CONFIG.SALES_FIELDS.filter(f => f.table).map(f => ({
-        label: this._loc(f.label), keys: [f.key], strong: f.key === 'bruto'
+      return CONFIG.SALES_TABLE_KEYS.map(k => ({
+        label: this._fieldLabel(k), keys: [k], strong: k === 'bruto'
       }));
     }
     const cols = [{ label: this.t('bruto'), keys: ['bruto'], strong: true }];
@@ -1784,12 +1784,14 @@ const App = {
 
       const CHUNK = isComplaint ? 200 : 500;
       let added = 0, skippedDup = 0;
+      const newCols = [];
       for (let i = 0; i < rows.length; i += CHUNK) {
         const slice = rows.slice(i, i + CHUNK);
         setStatus(this.t('upload_progress', { a: Math.min(i + CHUNK, rows.length).toLocaleString(this._locale()), b: rows.length.toLocaleString(this._locale()) }), 10 + Math.round(i / rows.length * 85));
         const res = isComplaint ? await Sheets.uploadComplaints(slice) : await Sheets.upload(slice);
         added += (res && res.added) || 0;
         skippedDup += (res && res.skipped) || 0;
+        ((res && res.addedColumns) || []).forEach(c => { if (newCols.indexOf(c) < 0) newCols.push(c); });
       }
       if (isComplaint) {
         const parts = [];
@@ -1798,7 +1800,9 @@ const App = {
         if (skippedDup > 0) parts.push(this.t('upload_dup_skipped', { n: skippedDup.toLocaleString(this._locale()) }));
         setStatus(parts.join(' '), 100);
       } else {
-        setStatus(this.t('upload_done', { n: rows.length.toLocaleString(this._locale()) }), 100);
+        const parts = [this.t('upload_done', { n: rows.length.toLocaleString(this._locale()) })];
+        if (newCols.length) parts.push(this.t('upload_new_columns', { n: newCols.length, list: newCols.join(', ') }));
+        setStatus(parts.join(' '), 100);
       }
       this._toast(this.t('upload_success'));
       Sheets.clearCache();

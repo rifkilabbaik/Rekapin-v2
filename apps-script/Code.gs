@@ -8,12 +8,12 @@ const SALES_FIELDS = [
   ['dineInCu',          'Dine In CU',         ['dine in cu', 'dinein cu', 'cu dine in']],
   ['takeAway',          'Take Away',          ['take away', 'takeaway']],
   ['takeAwayCu',        'Take Away CU',       ['take away cu', 'takeaway cu', 'cu take away']],
-  ['shopeeFood',        'ShopeeFood',         ['shopeefood', 'shopee food']],
-  ['shopeeFoodCu',      'ShopeeFood CU',      ['shopeefood cu', 'shopee food cu', 'cu shopeefood']],
   ['goFood',            'GoFood',             ['gofood', 'go food']],
   ['goFoodCu',          'GoFood CU',          ['gofood cu', 'go food cu', 'cu gofood']],
   ['grabFood',          'GrabFood',           ['grabfood', 'grab food']],
   ['grabFoodCu',        'GrabFood CU',        ['grabfood cu', 'grab food cu', 'cu grabfood']],
+  ['shopeeFood',        'ShopeeFood',         ['shopeefood', 'shopee food']],
+  ['shopeeFoodCu',      'ShopeeFood CU',      ['shopeefood cu', 'shopee food cu', 'cu shopeefood']],
   ['katering',          'Katering',           ['katering', 'catering']],
   ['kateringCu',        'Katering CU',        ['katering cu', 'catering cu', 'cu katering']],
   ['totalCu',           'Total CU',           ['total cu', 'jumlah cu']],
@@ -21,10 +21,10 @@ const SALES_FIELDS = [
   ['diskonOnline',      'Diskon Online',      ['diskon online']],
   ['biayaOnline',       'Biaya Online',       ['biaya online']],
   ['biayaPemasaran',    'Biaya Pemasaran',    ['biaya pemasaran']],
-  ['diskon',            'Diskon',             ['diskon']],
   ['biayaPengemasan',   'Biaya Pengemasan',   ['biaya pengemasan']],
   ['selisihPembulatan', 'Selisih Pembulatan', ['selisih pembulatan']],
   ['selisihSetoran',    'Selisih Setoran',    ['selisih setoran']],
+  ['diskon',            'Diskon',             ['diskon']],
   ['netto',             'Netto',              ['netto']],
   ['rataNetto',         'Rata-rata Netto',    ['rata-rata netto', 'rata rata netto', 'rerata netto']]
 ];
@@ -101,16 +101,21 @@ function _salesIndex(sheet) {
   return { width: width, header: header, col: col };
 }
 
-function _salesIndexStrict(sheet) {
+function _salesIndexEnsure(sheet) {
   const ix = _salesIndex(sheet);
-  const missing = [];
-  if (ix.col.date === undefined) missing.push(HEADERS.DATA[0]);
-  if (ix.col.branch === undefined) missing.push(HEADERS.DATA[1]);
-  SALES_FIELDS.forEach(f => { if (ix.col[f[0]] === undefined) missing.push(f[1]); });
-  if (missing.length) {
-    throw new Error('Kolom ini tidak ada di header sheet ' + SHEETS.DATA + ': ' + missing.join(', ') +
-      '. Tambahkan nama kolomnya di baris 1, lalu upload lagi.');
-  }
+  const need = [['date', HEADERS.DATA[0]], ['branch', HEADERS.DATA[1]]]
+    .concat(SALES_FIELDS.map(f => [f[0], f[1]]));
+  let width = ix.width;
+  const addedHeaders = [];
+  need.forEach(n => {
+    if (ix.col[n[0]] !== undefined) return;
+    width++;
+    sheet.getRange(1, width, 1, 1).setValue(n[1]);
+    ix.col[n[0]] = width - 1;
+    addedHeaders.push(n[1]);
+  });
+  ix.width = width;
+  ix.addedHeaders = addedHeaders;
   return ix;
 }
 
@@ -201,9 +206,10 @@ function _debug() {
 
 function _checkDuplicate(pairs) {
   const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
-  const ix = _salesIndexStrict(sheet);
+  const ix = _salesIndex(sheet);
   const existing = {};
-  const values = sheet.getLastRow() < 2 ? [] : sheet.getDataRange().getValues();
+  const values = (sheet.getLastRow() < 2 || ix.col.date === undefined || ix.col.branch === undefined)
+    ? [] : sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
     const d = _normalizeDate(values[i][ix.col.date]);
     const b = String(values[i][ix.col.branch] || '').trim();
@@ -221,7 +227,7 @@ function _checkDuplicate(pairs) {
 function _upload(rows) {
   if (!rows || rows.length === 0) return { added: 0 };
   const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
-  const ix = _salesIndexStrict(sheet);
+  const ix = _salesIndexEnsure(sheet);
   const targets = [{ key: 'date', col: ix.col.date }, { key: 'branch', col: ix.col.branch }]
     .concat(SALES_FIELDS.map(f => ({ key: f[0], col: ix.col[f[0]] })))
     .sort((a, b) => a.col - b.col);
@@ -241,7 +247,7 @@ function _upload(rows) {
     sheet.getRange(startRow, block[0].col + 1, rows.length, block.length).setValues(matrix);
     i = j + 1;
   }
-  return { added: rows.length };
+  return { added: rows.length, addedColumns: ix.addedHeaders };
 }
 
 function _fetchKegiatan() {
