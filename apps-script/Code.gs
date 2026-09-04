@@ -2,20 +2,22 @@
 
 const SHEETS = { DATA: 'Data', REGIONAL: 'Regional', KEGIATAN: 'Kegiatan', KOMPLAIN: 'Komplain' };
 const SALES_FIELDS = [
-  ['bruto',           'Bruto'],
-  ['dineIn',          'Dine In'],
-  ['takeAway',        'Take Away'],
-  ['shopeeFood',      'ShopeeFood'],
-  ['goFood',          'GoFood'],
-  ['grabFood',        'GrabFood'],
-  ['katering',        'Katering'],
-  ['mdr',             'Mdr'],
-  ['diskonOnline',    'Diskon Online'],
-  ['biayaOnline',     'Biaya Online'],
-  ['biayaPemasaran',  'Biaya Pemasaran'],
-  ['diskon',          'Diskon'],
-  ['biayaPengemasan', 'Biaya Pengemasan']
+  ['bruto',           'Bruto',            ['bruto']],
+  ['dineIn',          'Dine In',          ['dine in', 'dinein']],
+  ['takeAway',        'Take Away',        ['take away', 'takeaway']],
+  ['shopeeFood',      'ShopeeFood',       ['shopeefood', 'shopee food']],
+  ['goFood',          'GoFood',           ['gofood', 'go food']],
+  ['grabFood',        'GrabFood',         ['grabfood', 'grab food']],
+  ['katering',        'Katering',         ['katering', 'catering']],
+  ['mdr',             'Mdr',              ['mdr']],
+  ['diskonOnline',    'Diskon Online',    ['diskon online']],
+  ['biayaOnline',     'Biaya Online',     ['biaya online']],
+  ['biayaPemasaran',  'Biaya Pemasaran',  ['biaya pemasaran']],
+  ['diskon',          'Diskon',           ['diskon']],
+  ['biayaPengemasan', 'Biaya Pengemasan', ['biaya pengemasan']]
 ];
+const SALES_DATE_ALIASES = ['tanggal', 'sales date', 'date'];
+const SALES_BRANCH_ALIASES = ['nama toko', 'toko', 'nama store', 'branch name', 'branch'];
 const HEADERS = {
   DATA:     ['Tanggal', 'Nama Toko'].concat(SALES_FIELDS.map(function (f) { return f[1]; })),
   REGIONAL: ['Regional', 'Area', 'Nama Toko'],
@@ -74,24 +76,49 @@ function _handle(e, fn) {
   catch (err) { return _json({ status: 'error', error: err.message, stack: (err.stack||'').split('\n').slice(0,3).join('\n') }); }
 }
 
-function _fetchAll() {
-  const sheet = _getSheet(SHEETS.DATA, HEADERS.DATA);
-  const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
-  const idx = _headerIndex(values[0]);
-  const dateIdx = idx['tanggal'];
-  const branchIdx = idx['nama toko'];
-  if (dateIdx === undefined || branchIdx === undefined) throw new Error('Header sheet Data tidak valid');
+function _salesIndex(sheet) {
+  const width = Math.max(sheet.getLastColumn(), 1);
+  const header = sheet.getRange(1, 1, 1, width).getValues()[0];
+  const idx = _headerIndex(header);
+  const pick = (aliases) => {
+    for (let i = 0; i < aliases.length; i++) if (idx[aliases[i]] !== undefined) return idx[aliases[i]];
+    return undefined;
+  };
+  const col = { date: pick(SALES_DATE_ALIASES), branch: pick(SALES_BRANCH_ALIASES) };
+  SALES_FIELDS.forEach(f => { col[f[0]] = pick(f[2]); });
+  return { width: width, header: header, col: col };
+}
 
+function _salesIndexStrict(sheet) {
+  const ix = _salesIndex(sheet);
+  const missing = [];
+  if (ix.col.date === undefined) missing.push(HEADERS.DATA[0]);
+  if (ix.col.branch === undefined) missing.push(HEADERS.DATA[1]);
+  SALES_FIELDS.forEach(f => { if (ix.col[f[0]] === undefined) missing.push(f[1]); });
+  if (missing.length) {
+    throw new Error('Kolom ini tidak ada di header sheet ' + SHEETS.DATA + ': ' + missing.join(', ') +
+      '. Tambahkan nama kolomnya di baris 1, lalu upload lagi.');
+  }
+  return ix;
+}
+
+function _fetchAll() {
+  const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
+  if (sheet.getLastRow() < 2) return [];
+  const values = sheet.getDataRange().getValues();
+  const ix = _salesIndex(sheet);
+  if (ix.col.date === undefined || ix.col.branch === undefined) {
+    throw new Error('Header sheet ' + SHEETS.DATA + ' tidak punya kolom ' + HEADERS.DATA[0] + ' & ' + HEADERS.DATA[1] + '.');
+  }
   const rows = [];
   for (let i = 1; i < values.length; i++) {
     const r = values[i];
-    if (!r[dateIdx] || !r[branchIdx]) continue;
-    const date = _normalizeDate(r[dateIdx]);
+    if (!r[ix.col.date] || !r[ix.col.branch]) continue;
+    const date = _normalizeDate(r[ix.col.date]);
     if (!date) continue;
-    const row = { date: date, branch: String(r[branchIdx]).trim() };
+    const row = { date: date, branch: String(r[ix.col.branch]).trim() };
     SALES_FIELDS.forEach(f => {
-      const ci = idx[f[1].toLowerCase()];
+      const ci = ix.col[f[0]];
       row[f[0]] = ci === undefined ? 0 : (Number(r[ci]) || 0);
     });
     rows.push(row);
@@ -100,14 +127,23 @@ function _fetchAll() {
 }
 
 function _fetchRegional() {
-  const sheet = _getSheet(SHEETS.REGIONAL, HEADERS.REGIONAL);
+  const sheet = _getSheetSoft(SHEETS.REGIONAL, HEADERS.REGIONAL);
+  if (sheet.getLastRow() < 2) return [];
   const values = sheet.getDataRange().getValues();
-  if (values.length < 2) return [];
+  const idx = _headerIndex(values[0]);
+  const at = (name, fallback) => (idx[name] === undefined ? fallback : idx[name]);
+  const rIdx = at('regional', 0);
+  const aIdx = at('area', 1);
+  const bIdx = idx['nama toko'] === undefined ? at('toko', 2) : idx['nama toko'];
   const rows = [];
   for (let i = 1; i < values.length; i++) {
     const r = values[i];
-    if (!r[0] || !r[2]) continue;
-    rows.push({ regional: String(r[0]).trim(), area: String(r[1] || '').trim(), branch: String(r[2]).trim() });
+    if (!r[rIdx] || !r[bIdx]) continue;
+    rows.push({
+      regional: String(r[rIdx]).trim(),
+      area: String(r[aIdx] === undefined ? '' : r[aIdx]).trim(),
+      branch: String(r[bIdx]).trim()
+    });
   }
   return rows;
 }
@@ -126,7 +162,8 @@ function _status() {
   const dataSheet = ss.getSheetByName(SHEETS.DATA);
   let lastDate = null, rowCount = 0, dateSet = {};
   if (dataSheet && dataSheet.getLastRow() > 1) {
-    const dates = dataSheet.getRange(2, 1, dataSheet.getLastRow() - 1, 1).getValues();
+    const dateCol = _salesIndex(dataSheet).col.date;
+    const dates = dataSheet.getRange(2, (dateCol === undefined ? 0 : dateCol) + 1, dataSheet.getLastRow() - 1, 1).getValues();
     for (const [v] of dates) {
       const d = _normalizeDate(v);
       if (d) {
@@ -151,12 +188,13 @@ function _debug() {
 }
 
 function _checkDuplicate(pairs) {
-  const sheet = _getSheet(SHEETS.DATA, HEADERS.DATA);
-  const values = sheet.getDataRange().getValues();
+  const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
+  const ix = _salesIndexStrict(sheet);
   const existing = {};
+  const values = sheet.getLastRow() < 2 ? [] : sheet.getDataRange().getValues();
   for (let i = 1; i < values.length; i++) {
-    const d = _normalizeDate(values[i][0]);
-    const b = String(values[i][1] || '').trim();
+    const d = _normalizeDate(values[i][ix.col.date]);
+    const b = String(values[i][ix.col.branch] || '').trim();
     if (d && b) existing[d + '|' + b] = true;
   }
   const duplicates = [];
@@ -170,16 +208,28 @@ function _checkDuplicate(pairs) {
 
 function _upload(rows) {
   if (!rows || rows.length === 0) return { added: 0 };
-  const sheet = _getSheet(SHEETS.DATA, HEADERS.DATA);
-  const arr = rows.map(r => {
-    const line = [r.date, r.branch];
-    SALES_FIELDS.forEach(f => { line.push(Number(r[f[0]]) || 0); });
-    return line;
-  });
-  const lastRow = sheet.getLastRow();
-  sheet.getRange(lastRow + 1, 1, arr.length, 1).setNumberFormat('@');
-  sheet.getRange(lastRow + 1, 1, arr.length, HEADERS.DATA.length).setValues(arr);
-  return { added: arr.length };
+  const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
+  const ix = _salesIndexStrict(sheet);
+  const targets = [{ key: 'date', col: ix.col.date }, { key: 'branch', col: ix.col.branch }]
+    .concat(SALES_FIELDS.map(f => ({ key: f[0], col: ix.col[f[0]] })))
+    .sort((a, b) => a.col - b.col);
+  const cell = (r, key) => {
+    if (key === 'date') return String(r.date);
+    if (key === 'branch') return String(r.branch);
+    return Number(r[key]) || 0;
+  };
+  const startRow = sheet.getLastRow() + 1;
+  sheet.getRange(startRow, ix.col.date + 1, rows.length, 1).setNumberFormat('@');
+  let i = 0;
+  while (i < targets.length) {
+    let j = i;
+    while (j + 1 < targets.length && targets[j + 1].col === targets[j].col + 1) j++;
+    const block = targets.slice(i, j + 1);
+    const matrix = rows.map(r => block.map(t => cell(r, t.key)));
+    sheet.getRange(startRow, block[0].col + 1, rows.length, block.length).setValues(matrix);
+    i = j + 1;
+  }
+  return { added: rows.length };
 }
 
 function _fetchKegiatan() {
@@ -342,28 +392,6 @@ function _uploadKomplain(rows) {
   });
   sheet.getRange(targetRow, 1, matrix.length, width).setValues(matrix);
   return { added: matrix.length, skipped: skipped };
-}
-
-function _getSheet(name, headers) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let s = ss.getSheetByName(name);
-  if (!s) {
-    s = ss.insertSheet(name);
-    s.getRange(1, 1, 1, headers.length).setValues([headers]);
-    s.setFrozenRows(1);
-
-    const cols = s.getMaxColumns();
-    if (cols > headers.length) s.deleteColumns(headers.length + 1, cols - headers.length);
-    const rows = s.getMaxRows();
-    if (rows > 100) s.deleteRows(101, rows - 100);
-  } else if (s.getLastRow() === 0 || !s.getRange(1, 1).getValue()) {
-    s.getRange(1, 1, 1, headers.length).setValues([headers]);
-    s.setFrozenRows(1);
-  }
-
-  const cols = s.getMaxColumns();
-  if (cols > headers.length) s.deleteColumns(headers.length + 1, cols - headers.length);
-  return s;
 }
 
 function _normalizeDate(v) {
