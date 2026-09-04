@@ -1199,6 +1199,12 @@ const App = {
     });
   },
 
+  _rangeTextFull(r) {
+    if (!r || !r.from) return '—';
+    const from = this._formatDMY(r.from);
+    return r.from === r.to ? from : from + ' - ' + this._formatDMY(r.to);
+  },
+
   _rangeText(r) {
     if (!r || !r.from) return '—';
     if (r.from === r.to) return this._formatShort(r.from);
@@ -1433,32 +1439,37 @@ const App = {
       { label: this.t('bruto'), value: bruto, text: money(bruto) },
       { label: this.t('netto'), value: netto, text: money(netto) }
     ];
+    const periode = { label: this.t('export_period'), value: this._rangeTextFull(this._period()) };
+    const nameCol = () => ({ label: this.t('tbl_name'), type: 'text' });
 
     if (o.mode === 'daily') {
-      const columns = [{ label: this.t('export_col_date'), type: 'text' }, { label: this.t('tbl_name'), type: 'text' }]
-        .concat(cols.map(c => ({ label: c.label, type: c.type })));
-      const rank = {};
-      view.rows.forEach((r, i) => { rank[r.key] = i; });
-      const rows = [];
-      Array.from(new Set(this.filtered.map(r => r.date))).sort().forEach(d => {
-        const groups = this._groupSales(this.filtered.filter(r => r.date === d), level);
-        Object.keys(groups)
-          .filter(k => rank[k] !== undefined)
-          .sort((a, b) => rank[a] - rank[b])
-          .forEach(k => {
-            rows.push([this._formatDMY(d), nameOf(k)].concat(cols.map(c => Number(groups[k][c.key]) || 0)));
-          });
-      });
-      return { columns, rows, totals };
+      const dates = Array.from(new Set(this.filtered.map(r => r.date))).sort();
+      const byDate = {};
+      dates.forEach(d => { byDate[d] = this._groupSales(this.filtered.filter(r => r.date === d), level); });
+      const entities = view.rows.map(r => r.key);
+      const blocks = cols.map(c => ({
+        name: c.label,
+        columns: [nameCol()].concat(dates.map(d => ({ label: this._formatDMY(d), type: c.type }))),
+        rows: entities.map(k => [nameOf(k)].concat(dates.map(d => Number((byDate[d][k] || {})[c.key]) || 0)))
+      }));
+      return {
+        meta: [periode, { label: this.t('export_meta_channel'), value: cols.map(c => c.label).join(', ') }],
+        blocks,
+        totals
+      };
     }
 
-    const columns = [{ label: this.t('tbl_name'), type: 'text' }]
+    const columns = [nameCol()]
       .concat(cols.map(c => ({ label: c.label, type: c.type })))
       .concat([{ label: this.t('tbl_growth'), type: 'text' }]);
     const rows = view.rows.map(r => [nameOf(r.key)]
       .concat(cols.map(c => Number(r.vals[c.key]) || 0))
       .concat([r.growth === null ? '-' : (r.growth >= 0 ? '+' : '') + r.growth.toFixed(1) + '%']));
-    return { columns, rows, totals };
+    return {
+      meta: [periode].concat(totals.map(tt => ({ label: tt.label, value: tt.text }))),
+      blocks: [{ name: '', columns, rows }],
+      totals
+    };
   },
 
   _complaintExportSpec() {
@@ -1487,32 +1498,48 @@ const App = {
     const cols = o.keys.map(k => ({ key: k, label: label(k) }));
     const total = view.rows.reduce((s, r) => s + r.total, 0);
     const totals = [{ label: this.t('tbl_total'), value: total, text: total.toLocaleString('id-ID') }];
+    const periode = { label: this.t('export_period'), value: this._rangeTextFull(this._period()) };
+    const nameCol = () => ({ label: this.t('tbl_name'), type: 'text' });
 
     if (o.mode === 'daily') {
-      const columns = [{ label: this.t('export_col_date'), type: 'text' }, { label: this.t('tbl_name'), type: 'text' }]
-        .concat(cols.map(c => ({ label: c.label, type: 'num' })));
-      const map = {};
-      this._filteredComplaints().forEach(c => {
+      const list = this._filteredComplaints();
+      const dates = Array.from(new Set(list.map(c => String(c.trxDate || '').slice(0, 10)).filter(Boolean))).sort();
+      const rank = {};
+      view.rows.forEach((r, i) => { rank[r.key] = i; });
+      const stores = Array.from(new Set(list.map(c => c.store).filter(Boolean)))
+        .sort((a, b) => (rank[a] === undefined ? 9999 : rank[a]) - (rank[b] === undefined ? 9999 : rank[b]));
+      const counts = {};
+      list.forEach(c => {
         const d = String(c.trxDate || '').slice(0, 10);
         const k = d + '|' + c.store;
-        if (!map[k]) {
-          map[k] = { date: d, key: c.store, total: 0, other: 0, cats: {} };
-          view.cats.forEach(x => { map[k].cats[x] = 0; });
+        if (!counts[k]) {
+          counts[k] = { total: 0, other: 0, cats: {} };
+          view.cats.forEach(x => { counts[k].cats[x] = 0; });
         }
-        map[k].total++;
+        counts[k].total++;
         const cc = this._canonCategory(c.category);
-        if (cc) map[k].cats[cc]++; else map[k].other++;
+        if (cc) counts[k].cats[cc]++; else counts[k].other++;
       });
-      const rows = Object.values(map)
-        .sort((a, b) => a.date.localeCompare(b.date) || this._short(a.key).localeCompare(this._short(b.key)))
-        .map(g => [this._formatDMY(g.date), this._short(g.key)].concat(cols.map(c => valOf(g, c.key))));
-      return { columns, rows, totals };
+      const zero = { total: 0, other: 0, cats: {} };
+      const blocks = cols.map(c => ({
+        name: c.label,
+        columns: [nameCol()].concat(dates.map(d => ({ label: this._formatDMY(d), type: 'num' }))),
+        rows: stores.map(st => [this._short(st)].concat(dates.map(d => valOf(counts[d + '|' + st] || zero, c.key))))
+      }));
+      return {
+        meta: [periode, { label: this.t('export_meta_category'), value: cols.map(c => c.label).join(', ') }],
+        blocks,
+        totals
+      };
     }
 
-    const columns = [{ label: this.t('tbl_name'), type: 'text' }]
-      .concat(cols.map(c => ({ label: c.label, type: 'num' })));
+    const columns = [nameCol()].concat(cols.map(c => ({ label: c.label, type: 'num' })));
     const rows = view.rows.map(r => [this._short(r.key)].concat(cols.map(c => valOf(r, c.key))));
-    return { columns, rows, totals };
+    return {
+      meta: [periode].concat(totals.map(tt => ({ label: tt.label, value: tt.text }))),
+      blocks: [{ name: '', columns, rows }],
+      totals
+    };
   },
 
   _renderTokoDropdowns() {

@@ -108,20 +108,32 @@ const Exporter = {
       sheetName: this._spec.sheetName,
       unit: this._spec.unit,
       fileBase: this._spec.fileBase + (this._mode === 'daily' ? '_harian' : ''),
-      columns: built.columns,
-      rows: built.rows,
+      meta: built.meta,
+      blocks: built.blocks,
       totals: built.totals
     };
   },
+
+  _rowCount(ds) { return ds.blocks.reduce((n, b) => n + b.rows.length, 0); },
 
   _renderSummary() {
     const el = document.getElementById('exportSummary');
     const keys = this._orderedKeys();
     if (!keys.length) { el.textContent = this.app.t('export_need_column'); return; }
     this._built = this._dataset();
+    const ds = this._built;
+    const rows = this._rowCount(ds);
+    if (this._mode === 'daily') {
+      el.textContent = this.app.t('export_summary_daily', {
+        n: ds.blocks.length,
+        r: rows.toLocaleString(this.app._locale()),
+        d: Math.max(ds.blocks[0].columns.length - 1, 0)
+      });
+      return;
+    }
     el.textContent = this.app.t('export_summary', {
-      r: this._built.rows.length.toLocaleString(this.app._locale()),
-      c: this._built.columns.length
+      r: rows.toLocaleString(this.app._locale()),
+      c: ds.blocks[0].columns.length
     });
   },
 
@@ -138,7 +150,7 @@ const Exporter = {
       return;
     }
     const ds = this._built || this._dataset();
-    if (!ds || ds.rows.length === 0) {
+    if (!ds || this._rowCount(ds) === 0) {
       status.classList.add('err');
       status.textContent = t('export_empty');
       return;
@@ -210,7 +222,7 @@ const Exporter = {
     const ds = this._ds;
     const lines = [ds.title, ds.period];
     ds.totals.forEach(tt => lines.push(tt.label + ': ' + tt.text));
-    lines.push(ds.rows.length + ' ' + ds.unit);
+    lines.push(this._rowCount(ds) + ' ' + ds.unit);
     lines.push(this._file.name);
     return lines.join('\n');
   },
@@ -234,13 +246,24 @@ const Exporter = {
 
   _xlsx() {
     const ds = this._ds;
-    const aoa = [[ds.title], [ds.period]];
-    ds.totals.forEach(tt => aoa.push([tt.label, tt.value]));
+    const aoa = [[ds.title]];
+    ds.meta.forEach(m => aoa.push([m.label, m.value]));
     aoa.push([]);
-    aoa.push(ds.columns.map(c => c.label));
-    ds.rows.forEach(r => aoa.push(r.map((v, i) => (ds.columns[i].type === 'text' ? String(v == null ? '' : v) : Number(v) || 0))));
+    let width = 0;
+    ds.blocks.forEach(b => {
+      if (b.name) aoa.push([b.name]);
+      aoa.push(b.columns.map(c => c.label));
+      b.rows.forEach(r => aoa.push(r.map((v, i) => (b.columns[i].type === 'text' ? String(v == null ? '' : v) : Number(v) || 0))));
+      aoa.push([]);
+      width = Math.max(width, b.columns.length);
+    });
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws['!cols'] = ds.columns.map((c, i) => ({ wch: c.type === 'text' ? Math.max(14, c.label.length + 4) : Math.max(12, c.label.length + 2) }));
+    const first = ds.blocks[0].columns;
+    ws['!cols'] = [];
+    for (let i = 0; i < width; i++) {
+      const c = first[i];
+      ws['!cols'].push({ wch: !c || c.type === 'text' ? 26 : Math.max(12, String(c.label).length + 2) });
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, ds.sheetName);
     const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -250,13 +273,16 @@ const Exporter = {
   _md() {
     const ds = this._ds;
     const esc = (s) => String(s).replace(/\|/g, '\\|');
-    const lines = ['# ' + ds.title, '', '**' + this.app.t('export_period') + ':** ' + ds.period];
-    ds.totals.forEach(tt => lines.push('**' + tt.label + ':** ' + tt.text));
-    lines.push('');
-    lines.push('| ' + ds.columns.map(c => esc(c.label)).join(' | ') + ' |');
-    lines.push('| ' + ds.columns.map(c => (c.type === 'text' ? ':---' : '---:')).join(' | ') + ' |');
-    ds.rows.forEach(r => {
-      lines.push('| ' + r.map((v, i) => esc(this._cellText(ds.columns[i], v))).join(' | ') + ' |');
+    const lines = ['# ' + ds.title, ''];
+    ds.meta.forEach(m => lines.push('**' + m.label + ':** ' + m.value));
+    ds.blocks.forEach(b => {
+      lines.push('');
+      if (b.name) { lines.push('## ' + b.name); lines.push(''); }
+      lines.push('| ' + b.columns.map(c => esc(c.label)).join(' | ') + ' |');
+      lines.push('| ' + b.columns.map(c => (c.type === 'text' ? ':---' : '---:')).join(' | ') + ' |');
+      b.rows.forEach(r => {
+        lines.push('| ' + r.map((v, i) => esc(this._cellText(b.columns[i], v))).join(' | ') + ' |');
+      });
     });
     lines.push('');
     return new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
@@ -265,26 +291,46 @@ const Exporter = {
   async _pdf() {
     await this._loadPdfLibs();
     const ds = this._ds;
-    const jsPDFCtor = window.jspdf.jsPDF;
-    const doc = new jsPDFCtor({ orientation: ds.columns.length > 6 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
+    const wide = Math.max.apply(null, ds.blocks.map(b => b.columns.length));
+    const doc = new window.jspdf.jsPDF({ orientation: wide > 6 ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' });
     doc.setFontSize(14);
     doc.text(ds.title, 32, 34);
     doc.setFontSize(9);
-    const head = [this.app.t('export_period') + ': ' + ds.period]
-      .concat(ds.totals.map(tt => tt.label + ': ' + tt.text));
-    doc.text(head.join('   |   '), 32, 50);
-    doc.autoTable({
-      head: [ds.columns.map(c => c.label)],
-      body: ds.rows.map(r => r.map((v, i) => this._cellText(ds.columns[i], v))),
-      startY: 62,
-      margin: { left: 24, right: 24 },
-      styles: { fontSize: ds.columns.length > 10 ? 6 : 8, cellPadding: 3, overflow: 'linebreak' },
-      headStyles: { fillColor: [74, 144, 184], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [246, 246, 242] },
-      columnStyles: ds.columns.reduce((acc, c, i) => {
-        acc[i] = { halign: c.type === 'text' ? 'left' : 'right' };
-        return acc;
-      }, {})
+    doc.text(ds.meta.map(m => m.label + ': ' + m.value).join('   |   '), 32, 50, { maxWidth: doc.internal.pageSize.getWidth() - 64 });
+    let y = 66;
+    const MAX_COLS = 13;
+    ds.blocks.forEach(b => {
+      const chunks = [];
+      if (b.columns.length <= MAX_COLS) chunks.push(b.columns.map((c, i) => i));
+      else {
+        for (let i = 1; i < b.columns.length; i += MAX_COLS - 1) {
+          chunks.push([0].concat(b.columns.slice(i, i + MAX_COLS - 1).map((c, k) => i + k)));
+        }
+      }
+      chunks.forEach((idxs, ci) => {
+        const cols = idxs.map(i => b.columns[i]);
+        const label = b.name ? b.name + (chunks.length > 1 ? ' (' + cols[1].label + ' – ' + cols[cols.length - 1].label + ')' : '') : '';
+        if (label) {
+          if (y > doc.internal.pageSize.getHeight() - 90) { doc.addPage(); y = 40; }
+          doc.setFontSize(11);
+          doc.text(label, 26, y + 10);
+          y += 16;
+        }
+        doc.autoTable({
+          head: [cols.map(c => c.label)],
+          body: b.rows.map(r => idxs.map(i => this._cellText(b.columns[i], r[i]))),
+          startY: y,
+          margin: { left: 24, right: 24 },
+          styles: { fontSize: cols.length > 10 ? 6 : 8, cellPadding: 3, overflow: 'linebreak' },
+          headStyles: { fillColor: [74, 144, 184], textColor: 255, fontStyle: 'bold' },
+          alternateRowStyles: { fillColor: [246, 246, 242] },
+          columnStyles: cols.reduce((acc, c, i) => {
+            acc[i] = { halign: c.type === 'text' ? 'left' : 'right' };
+            return acc;
+          }, {})
+        });
+        y = doc.lastAutoTable.finalY + 18;
+      });
     });
     return doc.output('blob');
   },
