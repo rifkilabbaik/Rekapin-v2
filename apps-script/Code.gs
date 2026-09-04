@@ -238,30 +238,53 @@ function _debug() {
   return { spreadsheet: ss.getName(), id: ss.getId(), sheets: allSheets };
 }
 
+function _salesKey(date, branch) {
+  const d = _normalizeDate(date) || String(date == null ? '' : date).trim();
+  const b = String(branch == null ? '' : branch).replace(/\s+/g, ' ').trim().toLowerCase();
+  return (d && b) ? d + '|' + b : '';
+}
+
+function _salesExistingKeys(sheet, ix) {
+  const set = {};
+  if (ix.col.date === undefined || ix.col.branch === undefined) return set;
+  if (sheet.getLastRow() <= ix.headerRows) return set;
+  const values = sheet.getDataRange().getValues();
+  for (let i = ix.firstDataRow - 1; i < values.length; i++) {
+    const key = _salesKey(values[i][ix.col.date], values[i][ix.col.branch]);
+    if (key) set[key] = true;
+  }
+  return set;
+}
+
 function _checkDuplicate(pairs) {
   const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
-  const ix = _salesIndex(sheet);
-  const existing = {};
-  const values = (sheet.getLastRow() <= ix.headerRows || ix.col.date === undefined || ix.col.branch === undefined)
-    ? [] : sheet.getDataRange().getValues();
-  for (let i = ix.firstDataRow - 1; i < values.length; i++) {
-    const d = _normalizeDate(values[i][ix.col.date]);
-    const b = String(values[i][ix.col.branch] || '').trim();
-    if (d && b) existing[d + '|' + b] = true;
-  }
+  const existing = _salesExistingKeys(sheet, _salesIndex(sheet));
   const duplicates = [];
   const newOnes = [];
+  const seen = {};
   pairs.forEach(p => {
-    if (existing[p.date + '|' + p.branch]) duplicates.push(p);
-    else newOnes.push(p);
+    const key = _salesKey(p.date, p.branch);
+    if (existing[key] || seen[key]) duplicates.push(p);
+    else { seen[key] = true; newOnes.push(p); }
   });
   return { totalInFile: pairs.length, duplicates: duplicates.length, newOnes: newOnes.length, duplicatePairs: duplicates.slice(0, 20) };
 }
 
 function _upload(rows) {
-  if (!rows || rows.length === 0) return { added: 0 };
+  if (!rows || rows.length === 0) return { added: 0, skipped: 0, addedColumns: [] };
   const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
   const ix = _salesIndexEnsure(sheet);
+  const existing = _salesExistingKeys(sheet, ix);
+  const fresh = [];
+  let skipped = 0;
+  rows.forEach(r => {
+    const key = _salesKey(r.date, r.branch);
+    if (!key || existing[key]) { skipped++; return; }
+    existing[key] = true;
+    fresh.push(r);
+  });
+  if (fresh.length === 0) return { added: 0, skipped: skipped, addedColumns: ix.addedHeaders };
+
   const targets = [{ key: 'date', col: ix.col.date }, { key: 'branch', col: ix.col.branch }]
     .concat(SALES_FIELDS.map(f => ({ key: f[0], col: ix.col[f[0]] })))
     .sort((a, b) => a.col - b.col);
@@ -271,17 +294,17 @@ function _upload(rows) {
     return Number(r[key]) || 0;
   };
   const startRow = sheet.getLastRow() + 1;
-  sheet.getRange(startRow, ix.col.date + 1, rows.length, 1).setNumberFormat('@');
+  sheet.getRange(startRow, ix.col.date + 1, fresh.length, 1).setNumberFormat('@');
   let i = 0;
   while (i < targets.length) {
     let j = i;
     while (j + 1 < targets.length && targets[j + 1].col === targets[j].col + 1) j++;
     const block = targets.slice(i, j + 1);
-    const matrix = rows.map(r => block.map(t => cell(r, t.key)));
-    sheet.getRange(startRow, block[0].col + 1, rows.length, block.length).setValues(matrix);
+    const matrix = fresh.map(r => block.map(t => cell(r, t.key)));
+    sheet.getRange(startRow, block[0].col + 1, fresh.length, block.length).setValues(matrix);
     i = j + 1;
   }
-  return { added: rows.length, addedColumns: ix.addedHeaders };
+  return { added: fresh.length, skipped: skipped, addedColumns: ix.addedHeaders };
 }
 
 function _fetchKegiatan() {
