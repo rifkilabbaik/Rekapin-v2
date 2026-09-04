@@ -78,7 +78,7 @@
 
       <div class="metric-groups" id="metricGroups"></div>
 
-      <div class="panel">
+      <div class="panel" id="panelRegional">
         <div class="panel-head">
           <div class="panel-label" data-i18n="sales_regional">Penjualan Regional</div>
           <button class="sort-chip" id="sortRegional" data-mode="name">Nama ▾</button>
@@ -128,7 +128,7 @@
     </section>
 
     <section class="page" data-page="sales">
-      <div class="panel">
+      <div class="panel" id="panelSalesRegional">
         <div class="panel-head">
           <div class="panel-label" data-i18n="sales_regional">Penjualan Regional</div>
           <div class="panel-head-right">
@@ -162,7 +162,7 @@
           </div>
         </div>
         <div class="sub-filter-2col sub-filter-3col">
-          <div>
+          <div id="tokoRegionalWrap">
             <label data-i18n="regional">Regional</label>
             <div class="dropdown-select" data-key="tokoRegional"></div>
           </div>
@@ -244,6 +244,12 @@
       <div class="panel">
         <div class="setting-label" data-i18n="setting_text">Format text</div>
         <div class="dropdown-select" data-key="font"></div>
+      </div>
+
+      <div class="panel">
+        <div class="setting-label" data-i18n="setting_regional_access">Regional yang bisa diakses</div>
+        <div class="dropdown-select" data-key="accessRegionals"></div>
+        <div class="setting-note" data-i18n="setting_regional_access_note">Kosong = semua regional.</div>
       </div>
 
       <div class="panel">
