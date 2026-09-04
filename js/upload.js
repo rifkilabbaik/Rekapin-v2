@@ -131,7 +131,7 @@ const UploadParser = {
     if (storeIdx < 0) throw new Error('Kolom "Toko" tidak ada di "' + file.name + '".');
     const idx = {};
     CONFIG.SALES_FIELDS.forEach(f => {
-      const i = this._findColumn(flat, f.source);
+      const i = this._findColumn(flat, f);
       if (i < 0) throw new Error('Kolom "' + f.header + '" tidak ada di "' + file.name + '".');
       idx[f.key] = i;
     });
@@ -175,7 +175,9 @@ const UploadParser = {
     return flat;
   },
 
-  _findColumn(flat, source) {
+  _findColumn(flat, field) {
+    const source = field.source;
+    if (field.sub) return flat.indexOf(source + '|' + field.sub);
     let i = flat.indexOf(source);
     if (i >= 0) return i;
     i = flat.indexOf(source + '|penjualan');
