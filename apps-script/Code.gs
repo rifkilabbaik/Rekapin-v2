@@ -5,17 +5,17 @@ const SALES_FIELDS = [
   ['bruto',             'Bruto',              ['bruto']],
   ['rataBruto',         'Rata-rata Bruto',    ['rata-rata bruto', 'rata rata bruto', 'rerata bruto']],
   ['dineIn',            'Dine In',            ['dine in', 'dinein']],
-  ['dineInCu',          'Dine In CU',         ['dine in cu', 'dinein cu', 'cu dine in']],
+  ['dineInCu',          'Dine In CU',         ['dine in', 'dinein'], 'cu'],
   ['takeAway',          'Take Away',          ['take away', 'takeaway']],
-  ['takeAwayCu',        'Take Away CU',       ['take away cu', 'takeaway cu', 'cu take away']],
+  ['takeAwayCu',        'Take Away CU',       ['take away', 'takeaway'], 'cu'],
   ['goFood',            'GoFood',             ['gofood', 'go food']],
-  ['goFoodCu',          'GoFood CU',          ['gofood cu', 'go food cu', 'cu gofood']],
+  ['goFoodCu',          'GoFood CU',          ['gofood', 'go food'], 'cu'],
   ['grabFood',          'GrabFood',           ['grabfood', 'grab food']],
-  ['grabFoodCu',        'GrabFood CU',        ['grabfood cu', 'grab food cu', 'cu grabfood']],
+  ['grabFoodCu',        'GrabFood CU',        ['grabfood', 'grab food'], 'cu'],
   ['shopeeFood',        'ShopeeFood',         ['shopeefood', 'shopee food']],
-  ['shopeeFoodCu',      'ShopeeFood CU',      ['shopeefood cu', 'shopee food cu', 'cu shopeefood']],
+  ['shopeeFoodCu',      'ShopeeFood CU',      ['shopeefood', 'shopee food'], 'cu'],
   ['katering',          'Katering',           ['katering', 'catering']],
-  ['kateringCu',        'Katering CU',        ['katering cu', 'catering cu', 'cu katering']],
+  ['kateringCu',        'Katering CU',        ['katering', 'catering'], 'cu'],
   ['totalCu',           'Total CU',           ['total cu', 'jumlah cu']],
   ['mdr',               'Mdr',                ['mdr']],
   ['diskonOnline',      'Diskon Online',      ['diskon online']],
@@ -88,17 +88,50 @@ function _handle(e, fn) {
   catch (err) { return _json({ status: 'error', error: err.message, stack: (err.stack||'').split('\n').slice(0,3).join('\n') }); }
 }
 
-function _salesIndex(sheet) {
+const SALES_SUB_HEADERS = ['penjualan', 'cu'];
+
+function _norm(v) {
+  return String(v == null ? '' : v).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+function _salesHeaderNames(sheet) {
   const width = Math.max(sheet.getLastColumn(), 1);
-  const header = sheet.getRange(1, 1, 1, width).getValues()[0];
-  const idx = _headerIndex(header);
-  const pick = (aliases) => {
-    for (let i = 0; i < aliases.length; i++) if (idx[aliases[i]] !== undefined) return idx[aliases[i]];
+  const rowCount = sheet.getMaxRows() > 1 ? 2 : 1;
+  const raw = sheet.getRange(1, 1, rowCount, width).getValues();
+  const top = raw[0].map(_norm);
+  const sub = (raw[1] || []).map(_norm);
+  const hasSubRow = sub.some(v => SALES_SUB_HEADERS.indexOf(v) >= 0);
+  const names = [];
+  let lastTop = '';
+  for (let c = 0; c < width; c++) {
+    if (top[c]) lastTop = top[c];
+    const parent = top[c] || (hasSubRow && sub[c] ? lastTop : '');
+    const child = hasSubRow ? sub[c] : '';
+    names.push(child ? (parent ? parent + '|' + child : child) : parent);
+  }
+  return { width: width, names: names, headerRows: hasSubRow ? 2 : 1 };
+}
+
+function _salesIndex(sheet) {
+  const h = _salesHeaderNames(sheet);
+  const idx = {};
+  h.names.forEach((n, i) => { if (n && idx[n] === undefined) idx[n] = i; });
+  const pick = (aliases, sub) => {
+    for (let i = 0; i < aliases.length; i++) {
+      const a = aliases[i];
+      if (sub) {
+        if (idx[a + '|' + sub] !== undefined) return idx[a + '|' + sub];
+        if (idx[a + ' ' + sub] !== undefined) return idx[a + ' ' + sub];
+        continue;
+      }
+      if (idx[a] !== undefined) return idx[a];
+      if (idx[a + '|penjualan'] !== undefined) return idx[a + '|penjualan'];
+    }
     return undefined;
   };
   const col = { date: pick(SALES_DATE_ALIASES), branch: pick(SALES_BRANCH_ALIASES) };
-  SALES_FIELDS.forEach(f => { col[f[0]] = pick(f[2]); });
-  return { width: width, header: header, col: col };
+  SALES_FIELDS.forEach(f => { col[f[0]] = pick(f[2], f[3]); });
+  return { width: h.width, names: h.names, headerRows: h.headerRows, firstDataRow: h.headerRows + 1, col: col };
 }
 
 function _salesIndexEnsure(sheet) {
@@ -128,7 +161,7 @@ function _fetchAll() {
     throw new Error('Header sheet ' + SHEETS.DATA + ' tidak punya kolom ' + HEADERS.DATA[0] + ' & ' + HEADERS.DATA[1] + '.');
   }
   const rows = [];
-  for (let i = 1; i < values.length; i++) {
+  for (let i = ix.firstDataRow - 1; i < values.length; i++) {
     const r = values[i];
     if (!r[ix.col.date] || !r[ix.col.branch]) continue;
     const date = _normalizeDate(r[ix.col.date]);
@@ -178,9 +211,10 @@ function _status() {
   const usage = totalCells / CELL_LIMIT;
   const dataSheet = ss.getSheetByName(SHEETS.DATA);
   let lastDate = null, rowCount = 0, dateSet = {};
-  if (dataSheet && dataSheet.getLastRow() > 1) {
-    const dateCol = _salesIndex(dataSheet).col.date;
-    const dates = dataSheet.getRange(2, (dateCol === undefined ? 0 : dateCol) + 1, dataSheet.getLastRow() - 1, 1).getValues();
+  const dataIx = dataSheet ? _salesIndex(dataSheet) : null;
+  if (dataSheet && dataIx && dataSheet.getLastRow() > dataIx.headerRows) {
+    const dateCol = dataIx.col.date === undefined ? 0 : dataIx.col.date;
+    const dates = dataSheet.getRange(dataIx.firstDataRow, dateCol + 1, dataSheet.getLastRow() - dataIx.headerRows, 1).getValues();
     for (const [v] of dates) {
       const d = _normalizeDate(v);
       if (d) {
@@ -188,7 +222,7 @@ function _status() {
         if (!lastDate || d > lastDate) lastDate = d;
       }
     }
-    rowCount = dataSheet.getLastRow() - 1;
+    rowCount = dataSheet.getLastRow() - dataIx.headerRows;
   }
   const distinctDates = Object.keys(dateSet).length;
   return {
@@ -208,9 +242,9 @@ function _checkDuplicate(pairs) {
   const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
   const ix = _salesIndex(sheet);
   const existing = {};
-  const values = (sheet.getLastRow() < 2 || ix.col.date === undefined || ix.col.branch === undefined)
+  const values = (sheet.getLastRow() <= ix.headerRows || ix.col.date === undefined || ix.col.branch === undefined)
     ? [] : sheet.getDataRange().getValues();
-  for (let i = 1; i < values.length; i++) {
+  for (let i = ix.firstDataRow - 1; i < values.length; i++) {
     const d = _normalizeDate(values[i][ix.col.date]);
     const b = String(values[i][ix.col.branch] || '').trim();
     if (d && b) existing[d + '|' + b] = true;
