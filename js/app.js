@@ -572,11 +572,7 @@ const App = {
     return s;
   },
   _sumBruto(rows) { return this._sumFields(rows, ['bruto']); },
-  _nettoOf(vals) {
-    let s = Number(vals.bruto) || 0;
-    CONFIG.SALES_FIELDS.forEach(f => { if (f.cost) s += f.cost * (Number(vals[f.key]) || 0); });
-    return s;
-  },
+  _nettoOf(vals) { return Number(vals.netto) || 0; },
   _sumNetto(rows) {
     let s = 0;
     for (const r of rows) s += this._nettoOf(r);
@@ -990,14 +986,19 @@ const App = {
       { label: this.t('netto'), val: this._sumNetto(curRows) },
       { section: this.t('detail') }
     ];
+    const cu = this._sumFields(curRows, ['totalCu']);
+    if (cu > 0) {
+      rows.push({ label: this._fieldLabel('rataBruto'), val: cur / cu });
+      rows.push({ label: this._fieldLabel('rataNetto'), val: this._sumNetto(curRows) / cu });
+    }
     CONFIG.SALES_FIELDS.forEach(f => {
-      if (f.key === 'bruto') return;
+      if (f.agg === 'none' || f.key === 'bruto' || f.key === 'netto') return;
       const cCur = this._sumFields(curRows, [f.key]);
       if (cCur === 0) return;
       const cPrev = this._sumFields(prevRows, [f.key]);
       const cGr = this._growthPct(cCur, cPrev);
       rows.push({
-        label: this._loc(f.label), val: cCur,
+        label: this._loc(f.label), val: cCur, isCount: f.type === 'count',
         sub: cGr === null ? '—' : ((cGr >= 0 ? '+' : '') + cGr.toFixed(1) + '%'),
         subColor: this._pnlColor(cGr)
       });
@@ -1023,6 +1024,7 @@ const App = {
       let valStr;
       if (r.isGrowth) valStr = r.val === null ? '—' : ((r.val >= 0 ? '+' : '') + r.val.toFixed(1) + '%');
       else if (r.isDiff) valStr = (r.val >= 0 ? '+' : '') + this._fmtRp(Math.abs(r.val));
+      else if (r.isCount) valStr = this._fmtCount(r.val);
       else valStr = this._fmtRp(r.val);
       let color = '';
       if (r.isGrowth || r.isDiff) color = this._pnlColor(r.val);
@@ -1278,11 +1280,9 @@ const App = {
 
   _salesColumns(viewMode) {
     if (viewMode === 'full') {
-      const cols = CONFIG.SALES_FIELDS.map(f => ({
+      return CONFIG.SALES_FIELDS.filter(f => f.table).map(f => ({
         label: this._loc(f.label), keys: [f.key], strong: f.key === 'bruto'
       }));
-      cols.push({ label: this.t('netto'), netto: true });
-      return cols;
     }
     const cols = [{ label: this.t('bruto'), keys: ['bruto'], strong: true }];
     CONFIG.SALES_GROUPS.forEach(g => cols.push({ label: this._loc(g.label), keys: this._groupKeys(g.key) }));
@@ -1290,7 +1290,6 @@ const App = {
   },
 
   _colValue(row, col) {
-    if (col.netto) return row.netto;
     return col.keys.reduce((s, k) => s + (Number(row.vals[k]) || 0), 0);
   },
 
@@ -2447,6 +2446,10 @@ const App = {
     if (abs >= 1e6) return sign + 'Rp ' + Math.round(abs / 1e6).toLocaleString(this._locale()) + suffixes.m;
     if (abs >= 1e3) return sign + 'Rp ' + Math.round(abs / 1e3).toLocaleString(this._locale()) + suffixes.k;
     return sign + 'Rp ' + Math.round(abs);
+  },
+  _fmtCount(v) {
+    const n = Number(v) || 0;
+    return (Math.round(n * 100) / 100).toLocaleString(this._locale());
   },
   _fmtShort(v) {
     const dec = this.lang === 'en' ? '.' : ',';

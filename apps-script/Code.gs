@@ -2,19 +2,31 @@
 
 const SHEETS = { DATA: 'Data', REGIONAL: 'Regional', KEGIATAN: 'Kegiatan', KOMPLAIN: 'Komplain' };
 const SALES_FIELDS = [
-  ['bruto',           'Bruto',            ['bruto']],
-  ['dineIn',          'Dine In',          ['dine in', 'dinein']],
-  ['takeAway',        'Take Away',        ['take away', 'takeaway']],
-  ['shopeeFood',      'ShopeeFood',       ['shopeefood', 'shopee food']],
-  ['goFood',          'GoFood',           ['gofood', 'go food']],
-  ['grabFood',        'GrabFood',         ['grabfood', 'grab food']],
-  ['katering',        'Katering',         ['katering', 'catering']],
-  ['mdr',             'Mdr',              ['mdr']],
-  ['diskonOnline',    'Diskon Online',    ['diskon online']],
-  ['biayaOnline',     'Biaya Online',     ['biaya online']],
-  ['biayaPemasaran',  'Biaya Pemasaran',  ['biaya pemasaran']],
-  ['diskon',          'Diskon',           ['diskon']],
-  ['biayaPengemasan', 'Biaya Pengemasan', ['biaya pengemasan']]
+  ['bruto',             'Bruto',              ['bruto']],
+  ['rataBruto',         'Rata-rata Bruto',    ['rata-rata bruto', 'rata rata bruto', 'rerata bruto']],
+  ['dineIn',            'Dine In',            ['dine in', 'dinein']],
+  ['dineInCu',          'Dine In CU',         ['dine in cu', 'dinein cu', 'cu dine in']],
+  ['takeAway',          'Take Away',          ['take away', 'takeaway']],
+  ['takeAwayCu',        'Take Away CU',       ['take away cu', 'takeaway cu', 'cu take away']],
+  ['shopeeFood',        'ShopeeFood',         ['shopeefood', 'shopee food']],
+  ['shopeeFoodCu',      'ShopeeFood CU',      ['shopeefood cu', 'shopee food cu', 'cu shopeefood']],
+  ['goFood',            'GoFood',             ['gofood', 'go food']],
+  ['goFoodCu',          'GoFood CU',          ['gofood cu', 'go food cu', 'cu gofood']],
+  ['grabFood',          'GrabFood',           ['grabfood', 'grab food']],
+  ['grabFoodCu',        'GrabFood CU',        ['grabfood cu', 'grab food cu', 'cu grabfood']],
+  ['katering',          'Katering',           ['katering', 'catering']],
+  ['kateringCu',        'Katering CU',        ['katering cu', 'catering cu', 'cu katering']],
+  ['totalCu',           'Total CU',           ['total cu', 'jumlah cu']],
+  ['mdr',               'Mdr',                ['mdr']],
+  ['diskonOnline',      'Diskon Online',      ['diskon online']],
+  ['biayaOnline',       'Biaya Online',       ['biaya online']],
+  ['biayaPemasaran',    'Biaya Pemasaran',    ['biaya pemasaran']],
+  ['diskon',            'Diskon',             ['diskon']],
+  ['biayaPengemasan',   'Biaya Pengemasan',   ['biaya pengemasan']],
+  ['selisihPembulatan', 'Selisih Pembulatan', ['selisih pembulatan']],
+  ['selisihSetoran',    'Selisih Setoran',    ['selisih setoran']],
+  ['netto',             'Netto',              ['netto']],
+  ['rataNetto',         'Rata-rata Netto',    ['rata-rata netto', 'rata rata netto', 'rerata netto']]
 ];
 const SALES_DATE_ALIASES = ['tanggal', 'sales date', 'date'];
 const SALES_BRANCH_ALIASES = ['nama toko', 'toko', 'nama store', 'branch name', 'branch'];
