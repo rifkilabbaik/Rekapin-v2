@@ -220,7 +220,7 @@ const CONFIG = {
 
       dd_all_regionals: 'Semua regional',
       setting_regional_access: 'Regional yang bisa diakses',
-      setting_regional_access_note: 'Kosong = semua regional bisa diakses. Kalau hanya 1 regional yang dipilih, filter regional di Dasbor, Penjualan, Komplain, dan Kegiatan otomatis disembunyikan.',
+      setting_regional_saved: 'Akses regional diperbarui',
       dd_all_stores: 'Semua toko', dd_n_selected: '{n} toko dipilih',
       dd_select_all: 'Pilih semua', dd_clear: 'Kosongkan',
 
@@ -356,7 +356,7 @@ const CONFIG = {
 
       dd_all_regionals: 'All regionals',
       setting_regional_access: 'Accessible regionals',
-      setting_regional_access_note: 'Empty = every regional is accessible. When only 1 regional is selected, the regional filter on Dashboard, Sales, Complaint, and Activity is hidden automatically.',
+      setting_regional_saved: 'Regional access updated',
       dd_all_stores: 'All stores', dd_n_selected: '{n} stores selected',
       dd_select_all: 'Select all', dd_clear: 'Clear',
 
