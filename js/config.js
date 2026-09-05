@@ -218,6 +218,8 @@ const CONFIG = {
       top10_cmp: '10 Toko komplain tertinggi', cmp_unit: 'komplain',
 
       dd_all_regionals: 'Semua regional',
+      growth_basis: 'Dasar Pertumbuhan', growth_basis_prev: 'Penjualan bulan lalu',
+      growth_basis_target: 'Target penjualan',
       setting_regional_access: 'Regional yang bisa diakses',
       setting_regional_saved: 'Akses regional diperbarui',
       dd_all_stores: 'Semua toko', dd_n_selected: '{n} toko dipilih',
@@ -356,6 +358,8 @@ const CONFIG = {
       top10_cmp: 'Top 10 stores by complaints', cmp_unit: 'complaints',
 
       dd_all_regionals: 'All regionals',
+      growth_basis: 'Growth basis', growth_basis_prev: 'Last month sales',
+      growth_basis_target: 'Sales target',
       setting_regional_access: 'Accessible regionals',
       setting_regional_saved: 'Regional access updated',
       dd_all_stores: 'All stores', dd_n_selected: '{n} stores selected',

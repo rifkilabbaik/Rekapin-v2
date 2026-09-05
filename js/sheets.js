@@ -1,6 +1,7 @@
 const Sheets = {
   CACHE_KEY_DATA: 'cache_data_v1',
   CACHE_KEY_REGIONAL: 'cache_regional_v1',
+  CACHE_KEY_TARGET: 'cache_target_v1',
   CACHE_KEY_STATUS: 'cache_status_v1',
   CACHE_KEY_ACTIVITY: 'cache_activity_v1',
   CACHE_KEY_COMPLAINT: 'cache_complaint_v1',
@@ -32,6 +33,7 @@ const Sheets = {
   },
   async fetchAll()      { return (await this._get('fetchAll')).data; },
   async fetchRegional() { return (await this._get('fetchRegional')).data; },
+  async fetchTarget()   { return (await this._get('fetchTarget')).data; },
   async status()        { return (await this._get('status')).data; },
   async upload(rows)          { return (await this._post({ action: 'upload', rows })).data; },
 
