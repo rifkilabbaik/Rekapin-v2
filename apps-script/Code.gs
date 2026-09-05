@@ -1,6 +1,6 @@
 
 
-const SHEETS = { DATA: 'Data', REGIONAL: 'Regional', KEGIATAN: 'Kegiatan', KOMPLAIN: 'Komplain' };
+const SHEETS = { DATA: 'Data', REGIONAL: 'Regional', KEGIATAN: 'Kegiatan', KOMPLAIN: 'Komplain', TARGET: 'Target' };
 const SALES_FIELDS = [
   ['bruto',             'Bruto',              ['bruto']],
   ['rataBruto',         'Rata-rata Bruto',    ['rata-rata bruto', 'rata rata bruto', 'rerata bruto']],
@@ -33,6 +33,11 @@ const SALES_BRANCH_ALIASES = ['nama toko', 'toko', 'nama store', 'branch name', 
 const HEADERS = {
   DATA:     ['Tanggal', 'Nama Toko'].concat(SALES_FIELDS.map(function (f) { return f[1]; })),
   REGIONAL: ['Regional', 'Area', 'Nama Toko'],
+  TARGET: ['Bulan', 'Regional', 'Area', 'Toko', 'Total'].concat((function () {
+    const d = [];
+    for (let i = 1; i <= 31; i++) d.push(i);
+    return d;
+  })()),
 
   KEGIATAN: ['Tanggal', 'Nama', 'Nama Toko', 'Kegiatan', 'Keterangan 1', 'Keterangan 2'],
 
@@ -63,6 +68,7 @@ function doGet(e) {
     const a = p.action || 'status';
     if (a === 'fetchAll')      return { status: 'ok', data: _fetchAll() };
     if (a === 'fetchRegional') return { status: 'ok', data: _fetchRegional() };
+    if (a === 'fetchTarget')   return { status: 'ok', data: _fetchTarget() };
     if (a === 'status')        return { status: 'ok', data: _status() };
     if (a === 'fetchKegiatan') return { status: 'ok', data: _fetchKegiatan() };
     if (a === 'fetchKomplain') return { status: 'ok', data: _fetchKomplain() };
@@ -193,6 +199,39 @@ function _fetchRegional() {
       area: String(r[aIdx] === undefined ? '' : r[aIdx]).trim(),
       branch: String(r[bIdx]).trim()
     });
+  }
+  return rows;
+}
+
+function _fetchTarget() {
+  const sheet = _getSheetSoft(SHEETS.TARGET, HEADERS.TARGET);
+  if (sheet.getLastRow() < 2) return [];
+  const values = sheet.getDataRange().getValues();
+  const idx = _headerIndex(values[0]);
+  const monthIdx = idx['bulan'];
+  const yearIdx = idx['tahun'];
+  const branchIdx = idx['toko'] !== undefined ? idx['toko'] : idx['nama toko'];
+  if (monthIdx === undefined || branchIdx === undefined) return [];
+  const dayIdx = [];
+  for (let d = 1; d <= 31; d++) dayIdx.push(idx[String(d)]);
+
+  const rows = [];
+  for (let i = 1; i < values.length; i++) {
+    const r = values[i];
+    const branch = String(r[branchIdx] == null ? '' : r[branchIdx]).trim();
+    const month = parseInt(r[monthIdx], 10);
+    if (!branch || !(month >= 1 && month <= 12)) continue;
+    const days = [];
+    let any = false;
+    for (let d = 0; d < 31; d++) {
+      const ci = dayIdx[d];
+      const v = ci === undefined ? 0 : (Number(r[ci]) || 0);
+      if (v) any = true;
+      days.push(v);
+    }
+    if (!any) continue;
+    const year = yearIdx === undefined ? 0 : (parseInt(r[yearIdx], 10) || 0);
+    rows.push({ month: month, year: year, branch: branch, days: days });
   }
   return rows;
 }

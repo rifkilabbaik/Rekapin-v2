@@ -17,6 +17,9 @@ const App = {
   charts: {},
 
   accessRegionals: [],
+  targets: [],
+  growthBasis: 'prev',
+  _targetIdx: null,
   moneyFormat: 'auto',
   palette: 'krem_biru',
   fontFamily: 'default',
@@ -71,6 +74,7 @@ const App = {
       this.data = cached.data;
       this.regional = cached.regional || [];
       this.status = cached.status;
+      this.targets = Sheets.loadList(Sheets.CACHE_KEY_TARGET) || [];
       this._buildBranchMeta();
       this._setDefaultRange();
       this.applied = { ...this.filter };
@@ -91,6 +95,8 @@ const App = {
 
   _loadSettings() {
     this._loadAccessRegionals();
+    this.growthBasis = localStorage.getItem('growthBasis') || 'prev';
+    if (['prev', 'target'].indexOf(this.growthBasis) < 0) this.growthBasis = 'prev';
     this.moneyFormat = localStorage.getItem('moneyFormat') || 'auto';
     if (!['auto','full'].includes(this.moneyFormat)) this.moneyFormat = 'auto';
     this.palette = localStorage.getItem('palette') || 'krem_biru';
@@ -543,15 +549,18 @@ const App = {
   async loadAll(silent) {
     if (!silent) this._splash();
     try {
-      const [data, regional, status] = await Promise.all([
+      const [data, regional, status, targets] = await Promise.all([
         Sheets.fetchAll(),
         Sheets.fetchRegional().catch(() => []),
-        Sheets.status().catch(() => null)
+        Sheets.status().catch(() => null),
+        Sheets.fetchTarget().catch(() => [])
       ]);
       this.data = data;
       this.regional = regional;
       this.status = status;
+      this.targets = targets || [];
       Sheets.saveCache(data, regional, status);
+      Sheets.saveList(Sheets.CACHE_KEY_TARGET, this.targets);
       this._buildBranchMeta();
 
       if (this._rangeIsDefault || !this.applied || !this.applied.from) {
@@ -578,6 +587,7 @@ const App = {
       (this.regionalToAreas[r.regional] = this.regionalToAreas[r.regional] || []).push(r.area);
     });
     this.regional.forEach(r => { if (this._regionalAllowed(r.regional)) this.activeBranches.push(r.branch); });
+    this._buildTargetIndex();
 
     this._buildStoreIndex();
     this.complaints = this._normStores(this.complaints);
@@ -630,6 +640,64 @@ const App = {
     const f = CONFIG.SALES_FIELDS.find(x => x.key === key);
     return f ? this._loc(f.label) : key;
   },
+  _buildTargetIndex() {
+    const idx = {};
+    (this.targets || []).forEach(t => {
+      const b = this._canonStore(t.branch);
+      if (!b) return;
+      if (!idx[b]) idx[b] = {};
+      idx[b][t.year ? t.year + '-' + t.month : String(t.month)] = t.days || [];
+    });
+    this._targetIdx = idx;
+  },
+
+  _targetOn(recs, date) {
+    if (!recs) return 0;
+    const [y, m, d] = String(date).split('-').map(Number);
+    const days = recs[y + '-' + m] || recs[String(m)];
+    if (!days) return 0;
+    return Number(days[d - 1]) || 0;
+  },
+
+  _targetForStores(stores) {
+    if (!this._targetIdx || !stores.length) return 0;
+    const p = this._period();
+    if (!p.from || !p.to) return 0;
+    const dates = this._enumerateDates(p.from, p.to);
+    let sum = 0;
+    stores.forEach(b => {
+      const recs = this._targetIdx[b];
+      if (!recs) return;
+      dates.forEach(d => { sum += this._targetOn(recs, d); });
+    });
+    return sum;
+  },
+
+  _entityStores(level, key) {
+    if (level === 'branch') return this._storeList().filter(b => b === key);
+    return this._storeList().filter(b => {
+      const m = this.branchMeta[b];
+      if (!m) return false;
+      return level === 'area' ? m.area === key : m.regional === key;
+    });
+  },
+
+  _targetBasis() { return this.growthBasis === 'target'; },
+
+  _baselineLabel() {
+    return this._targetBasis()
+      ? this.t('growth_basis_target')
+      : this._rangeText(this._prevRange) + ' (' + this.t('prev_month') + ')';
+  },
+
+  _baselineTotal() {
+    return this._targetBasis() ? this._targetForStores(this._storeList()) : this._sumBruto(this.filteredPrev);
+  },
+
+  _baselineEntity(level, key, prevRows) {
+    return this._targetBasis() ? this._targetForStores(this._entityStores(level, key)) : this._sumBruto(prevRows);
+  },
+
   _growthPct(cur, prev) { if (prev === 0) return null; return ((cur - prev) / prev) * 100; },
 
   _pnlColor(v) {
@@ -690,7 +758,7 @@ const App = {
 
   _renderDashboard() {
     const total = this._sumBruto(this.filtered);
-    const totalPrev = this._sumBruto(this.filteredPrev);
+    const totalPrev = this._baselineTotal();
     const gr = this._growthPct(total, totalPrev);
     document.getElementById('mvTotal').textContent = this._fmtRp(total);
     const gEl = document.getElementById('mvTotalGrowth');
@@ -980,12 +1048,12 @@ const App = {
 
   _openTotalDetail() {
     const cur = this._sumBruto(this.filtered);
-    const prev = this._sumBruto(this.filteredPrev);
+    const prev = this._baselineTotal();
     const diff = cur - prev;
     const growth = this._growthPct(cur, prev);
     this._showDetail(this.t('total_sales'), [
       { label: this._rangeText(this.applied), val: cur },
-      { label: this._rangeText(this._prevRange) + ' (' + this.t('prev_month') + ')', val: prev },
+      { label: this._baselineLabel(), val: prev },
       { label: this.t('difference'), val: diff, isDiff: true },
       { label: this.t('growth'), val: growth, isGrowth: true },
       { label: this.t('netto'), val: this._sumNetto(this.filtered) }
@@ -1025,12 +1093,12 @@ const App = {
     const curRows = this._filterEntity(this.filtered, level, key);
     const prevRows = this._filterEntity(this.filteredPrev, level, key);
     const cur = this._sumBruto(curRows);
-    const prev = this._sumBruto(prevRows);
+    const prev = this._baselineEntity(level, key, prevRows);
     const diff = cur - prev;
     const growth = this._growthPct(cur, prev);
     const rows = [
       { label: this._rangeText(this.applied), val: cur },
-      { label: this._rangeText(this._prevRange) + ' (' + this.t('prev_month') + ')', val: prev },
+      { label: this._baselineLabel(), val: prev },
       { label: this.t('difference'), val: diff, isDiff: true },
       { label: this.t('growth'), val: growth, isGrowth: true },
       { label: this.t('netto'), val: this._sumNetto(curRows) },
@@ -1303,11 +1371,15 @@ const App = {
     };
     const vals = this._groupSales(this.filtered, level);
     const prev = {};
-    this.filteredPrev.forEach(r => {
-      const k = getKey(r);
-      if (!k) return;
-      prev[k] = (prev[k] || 0) + (Number(r.bruto) || 0);
-    });
+    if (this._targetBasis()) {
+      Object.keys(vals).forEach(k => { prev[k] = this._targetForStores(this._entityStores(level, k)); });
+    } else {
+      this.filteredPrev.forEach(r => {
+        const k = getKey(r);
+        if (!k) return;
+        prev[k] = (prev[k] || 0) + (Number(r.bruto) || 0);
+      });
+    }
     return Object.keys(vals).map(k => ({
       key: k,
       vals: vals[k],
@@ -1631,6 +1703,13 @@ const App = {
     this._initDropdown('money', moneyOpts, this.moneyFormat, (v) => {
       this.moneyFormat = v; this._save('moneyFormat', v); this._renderAll();
     });
+    const basisOpts = { prev: this.t('growth_basis_prev'), target: this.t('growth_basis_target') };
+    this._initDropdown('growthBasis', basisOpts, this.growthBasis, (v) => {
+      this.growthBasis = v;
+      this._save('growthBasis', v);
+      this._renderAll();
+    });
+
     this._buildAccessDropdown();
 
     const fontOpts = {};
