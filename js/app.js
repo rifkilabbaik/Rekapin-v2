@@ -1594,10 +1594,6 @@ const App = {
   },
 
   _bindSettingsPage() {
-    const sl = document.getElementById('linkSheet');
-    if (CONFIG.SHEET_URL && !CONFIG.SHEET_URL.startsWith('PASTE')) sl.href = CONFIG.SHEET_URL;
-    else sl.parentElement.hidden = true;
-
     this._on('btnClearCache', 'click', async () => {
       Sheets.clearCache();
       if ('caches' in window) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
@@ -1874,8 +1870,7 @@ const App = {
       });
       const isComplaint = parsed.kind === 'komplain';
 
-      const dup = isComplaint ? null
-        : await Sheets.checkDuplicate(parsed.rows.map(r => ({ date: r.date, branch: r.branch })));
+      const dup = isComplaint ? null : this._uploadDiff(parsed.rows);
       this._uploadCtx = { parsed, dup };
       const meta = parsed.meta;
       const kindLabel = this.t(isComplaint ? 'upload_kind_complaint' : 'upload_kind_sales');
@@ -1899,8 +1894,11 @@ const App = {
       res.hidden = false;
       const num = (v) => v.toLocaleString(this._locale());
       const lines = [`<b>${this._esc(this.t('upload_ready', { n: num(meta.rowCount) }))}</b>`];
-      if (dup && dup.duplicates > 0) {
-        lines.push(`<div class="upload-split">${this._esc(this.t('upload_split', { a: num(dup.newOnes), b: num(dup.duplicates) }))}</div>`);
+      if (dup && (dup.duplicates > 0 || dup.updates > 0)) {
+        const split = dup.updates > 0
+          ? this.t('upload_split_over', { u: num(dup.updates), a: num(dup.newOnes), b: num(dup.duplicates) })
+          : this.t('upload_split', { a: num(dup.newOnes), b: num(dup.duplicates) });
+        lines.push(`<div class="upload-split">${this._esc(split)}</div>`);
       }
       res.innerHTML = `<div class="info-box">${lines.join('')}</div>`;
       actions.hidden = false;
@@ -1913,6 +1911,27 @@ const App = {
       err.hidden = false;
       err.innerHTML = this._errorBox(this.t('upload_fail_process'), e.message);
     }
+  },
+
+  _salesRowKey(date, branch) {
+    return String(date) + '|' + String(branch == null ? '' : branch).replace(/\s+/g, ' ').trim().toLowerCase();
+  },
+
+  _sameSalesRow(a, b) {
+    const r2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+    return CONFIG.SALES_FIELDS.every(f => r2(a[f.key]) === r2(b[f.key]));
+  },
+
+  _uploadDiff(rows) {
+    const map = {};
+    this.data.forEach(r => { map[this._salesRowKey(r.date, r.branch)] = r; });
+    let newOnes = 0, updates = 0, duplicates = 0;
+    rows.forEach(r => {
+      const hit = map[this._salesRowKey(r.date, r.branch)];
+      if (!hit) { newOnes++; return; }
+      if (this._sameSalesRow(r, hit)) duplicates++; else updates++;
+    });
+    return { newOnes, updates, duplicates };
   },
 
   _errorBox(title, msg) {
@@ -1936,22 +1955,24 @@ const App = {
       const rows = this._uploadCtx.parsed.rows;
 
       const CHUNK = isComplaint ? 200 : 500;
-      let added = 0, skippedDup = 0;
+      let added = 0, updated = 0, skippedDup = 0;
       const newCols = [];
       for (let i = 0; i < rows.length; i += CHUNK) {
         const slice = rows.slice(i, i + CHUNK);
         setStatus(this.t('upload_progress', { a: Math.min(i + CHUNK, rows.length).toLocaleString(this._locale()), b: rows.length.toLocaleString(this._locale()) }), 10 + Math.round(i / rows.length * 85));
         const res = isComplaint ? await Sheets.uploadComplaints(slice) : await Sheets.upload(slice);
         added += (res && res.added) || 0;
+        updated += (res && res.updated) || 0;
         skippedDup += (res && res.skipped) || 0;
         ((res && res.addedColumns) || []).forEach(c => { if (newCols.indexOf(c) < 0) newCols.push(c); });
       }
       const parts = [];
       if (added > 0) {
         parts.push(this.t(isComplaint ? 'upload_done_complaint' : 'upload_done', { n: added.toLocaleString(this._locale()) }));
-      } else {
+      } else if (updated === 0) {
         parts.push(this.t('upload_none_added'));
       }
+      if (updated > 0) parts.push(this.t('upload_overwritten', { n: updated.toLocaleString(this._locale()) }));
       if (skippedDup > 0) parts.push(this.t('upload_dup_skipped', { n: skippedDup.toLocaleString(this._locale()) }));
       if (newCols.length) parts.push(this.t('upload_new_columns', { n: newCols.length, list: newCols.join(', ') }));
       setStatus(parts.join(' '), 100);

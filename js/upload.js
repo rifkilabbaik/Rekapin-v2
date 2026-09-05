@@ -11,7 +11,7 @@ const UploadParser = {
     }
     const kinds = Array.from(new Set(parsed.map(p => p.kind)));
     if (kinds.length > 1) throw new Error('File penjualan dan komplain tidak bisa diupload bersamaan. Pilih satu jenis saja.');
-    step('Menggabungkan data...', 90);
+    step('Memeriksa data...', 90);
     return kinds[0] === 'komplain' ? this._mergeComplaint(parsed) : this._mergeSales(parsed);
   },
 
@@ -23,7 +23,7 @@ const UploadParser = {
     const aoa = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: null, raw: true });
     const headerRow = this._findComplaintHeader(aoa);
     if (headerRow < 0) {
-      throw new Error('Format file "' + file.name + '" tidak dikenali. Penjualan: file export Grand Total All Store. Komplain: file dengan kolom "Nama Store" & "Media Komplain".');
+      throw new Error('Format file "' + file.name + '" tidak dikenali.');
     }
     return this._parseComplaint(file, aoa, headerRow);
   },

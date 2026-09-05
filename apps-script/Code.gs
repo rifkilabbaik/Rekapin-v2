@@ -74,7 +74,6 @@ function doGet(e) {
 function doPost(e) {
   return _handle(e, () => {
     const b = JSON.parse(e.postData.contents);
-    if (b.action === 'checkDuplicate') return { status: 'ok', data: _checkDuplicate(b.pairs || []) };
     if (b.action === 'upload')         return { status: 'ok', data: _upload(b.rows || []) };
     if (b.action === 'addKegiatan')    return { status: 'ok', data: _addKegiatan(b.row || {}) };
     if (b.action === 'addKomplain')    return { status: 'ok', data: _addKomplain(b.row || {}) };
@@ -244,48 +243,33 @@ function _salesKey(date, branch) {
   return (d && b) ? d + '|' + b : '';
 }
 
-function _salesExistingKeys(sheet, ix) {
-  const set = {};
-  if (ix.col.date === undefined || ix.col.branch === undefined) return set;
-  if (sheet.getLastRow() <= ix.headerRows) return set;
+function _salesExistingRows(sheet, ix) {
+  const map = {};
+  if (ix.col.date === undefined || ix.col.branch === undefined) return map;
+  if (sheet.getLastRow() <= ix.headerRows) return map;
   const values = sheet.getDataRange().getValues();
   for (let i = ix.firstDataRow - 1; i < values.length; i++) {
     const key = _salesKey(values[i][ix.col.date], values[i][ix.col.branch]);
-    if (key) set[key] = true;
+    if (key && !map[key]) map[key] = { row: i + 1, values: values[i] };
   }
-  return set;
+  return map;
 }
 
-function _checkDuplicate(pairs) {
-  const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
-  const existing = _salesExistingKeys(sheet, _salesIndex(sheet));
-  const duplicates = [];
-  const newOnes = [];
-  const seen = {};
-  pairs.forEach(p => {
-    const key = _salesKey(p.date, p.branch);
-    if (existing[key] || seen[key]) duplicates.push(p);
-    else { seen[key] = true; newOnes.push(p); }
-  });
-  return { totalInFile: pairs.length, duplicates: duplicates.length, newOnes: newOnes.length, duplicatePairs: duplicates.slice(0, 20) };
+function _round2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+function _sameSalesValues(row, existing, ix) {
+  if (!existing.values) return false;
+  for (let i = 0; i < SALES_FIELDS.length; i++) {
+    const ci = ix.col[SALES_FIELDS[i][0]];
+    if (ci === undefined) continue;
+    if (_round2(row[SALES_FIELDS[i][0]]) !== _round2(existing.values[ci])) return false;
+  }
+  return true;
 }
 
-function _upload(rows) {
-  if (!rows || rows.length === 0) return { added: 0, skipped: 0, addedColumns: [] };
-  const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
-  const ix = _salesIndexEnsure(sheet);
-  const existing = _salesExistingKeys(sheet, ix);
-  const fresh = [];
-  let skipped = 0;
-  rows.forEach(r => {
-    const key = _salesKey(r.date, r.branch);
-    if (!key || existing[key]) { skipped++; return; }
-    existing[key] = true;
-    fresh.push(r);
-  });
-  if (fresh.length === 0) return { added: 0, skipped: skipped, addedColumns: ix.addedHeaders };
-
-  const targets = [{ key: 'date', col: ix.col.date }, { key: 'branch', col: ix.col.branch }]
+function _writeSalesRows(sheet, ix, startRow, list, valuesOnly) {
+  const head = valuesOnly ? [] : [{ key: 'date', col: ix.col.date }, { key: 'branch', col: ix.col.branch }];
+  const targets = head
     .concat(SALES_FIELDS.map(f => ({ key: f[0], col: ix.col[f[0]] })))
     .sort((a, b) => a.col - b.col);
   const cell = (r, key) => {
@@ -293,18 +277,51 @@ function _upload(rows) {
     if (key === 'branch') return String(r.branch);
     return Number(r[key]) || 0;
   };
-  const startRow = sheet.getLastRow() + 1;
-  sheet.getRange(startRow, ix.col.date + 1, fresh.length, 1).setNumberFormat('@');
+  if (!valuesOnly) sheet.getRange(startRow, ix.col.date + 1, list.length, 1).setNumberFormat('@');
   let i = 0;
   while (i < targets.length) {
     let j = i;
     while (j + 1 < targets.length && targets[j + 1].col === targets[j].col + 1) j++;
     const block = targets.slice(i, j + 1);
-    const matrix = fresh.map(r => block.map(t => cell(r, t.key)));
-    sheet.getRange(startRow, block[0].col + 1, fresh.length, block.length).setValues(matrix);
+    sheet.getRange(startRow, block[0].col + 1, list.length, block.length)
+      .setValues(list.map(r => block.map(t => cell(r, t.key))));
     i = j + 1;
   }
-  return { added: fresh.length, skipped: skipped, addedColumns: ix.addedHeaders };
+}
+
+function _upload(rows) {
+  if (!rows || rows.length === 0) return { added: 0, updated: 0, skipped: 0, addedColumns: [] };
+  const sheet = _getSheetSoft(SHEETS.DATA, HEADERS.DATA);
+  const ix = _salesIndexEnsure(sheet);
+  const existing = _salesExistingRows(sheet, ix);
+  const fresh = [];
+  const updates = [];
+  let skipped = 0;
+  rows.forEach(r => {
+    const key = _salesKey(r.date, r.branch);
+    if (!key) { skipped++; return; }
+    const hit = existing[key];
+    if (hit) {
+      if (!hit.row || _sameSalesValues(r, hit, ix)) { skipped++; return; }
+      updates.push({ row: hit.row, data: r });
+      hit.values = null;
+      hit.row = 0;
+      return;
+    }
+    existing[key] = { row: 0, values: null };
+    fresh.push(r);
+  });
+
+  if (fresh.length) _writeSalesRows(sheet, ix, sheet.getLastRow() + 1, fresh);
+  updates.sort((a, b) => a.row - b.row);
+  let i = 0;
+  while (i < updates.length) {
+    let j = i;
+    while (j + 1 < updates.length && updates[j + 1].row === updates[j].row + 1) j++;
+    _writeSalesRows(sheet, ix, updates[i].row, updates.slice(i, j + 1).map(u => u.data), true);
+    i = j + 1;
+  }
+  return { added: fresh.length, updated: updates.length, skipped: skipped, addedColumns: ix.addedHeaders };
 }
 
 function _fetchKegiatan() {

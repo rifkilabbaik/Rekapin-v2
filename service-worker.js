@@ -1,6 +1,6 @@
 
 
-const CACHE_NAME = 'rekapin-v29';
+const CACHE_NAME = 'rekapin-v30';
 const APP_SHELL = [
   './',
   './index.html',
