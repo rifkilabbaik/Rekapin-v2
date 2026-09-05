@@ -587,11 +587,20 @@ const App = {
       (this.regionalToAreas[r.regional] = this.regionalToAreas[r.regional] || []).push(r.area);
     });
     this.regional.forEach(r => { if (this._regionalAllowed(r.regional)) this.activeBranches.push(r.branch); });
+    this._buildStoreIndex();
+    this.data = this._normSalesStores(this.data);
     this._buildTargetIndex();
 
     this._buildStoreIndex();
     this.complaints = this._normStores(this.complaints);
     this.activities = this._normStores(this.activities);
+  },
+
+  _normSalesStores(list) {
+    return (list || []).map(r => {
+      const canon = this._canonStore(r.branch);
+      return canon === r.branch ? r : { ...r, branch: canon };
+    });
   },
 
   _normStores(list) {
@@ -698,6 +707,10 @@ const App = {
     return this._targetBasis() ? this._targetForStores(this._entityStores(level, key)) : this._sumBruto(prevRows);
   },
 
+  _currentForBasis(rows) {
+    return this._targetBasis() ? this._sumNetto(rows) : this._sumBruto(rows);
+  },
+
   _growthPct(cur, prev) { if (prev === 0) return null; return ((cur - prev) / prev) * 100; },
 
   _pnlColor(v) {
@@ -759,7 +772,7 @@ const App = {
   _renderDashboard() {
     const total = this._sumBruto(this.filtered);
     const totalPrev = this._baselineTotal();
-    const gr = this._growthPct(total, totalPrev);
+    const gr = this._growthPct(this._currentForBasis(this.filtered), totalPrev);
     document.getElementById('mvTotal').textContent = this._fmtRp(total);
     const gEl = document.getElementById('mvTotalGrowth');
     if (gr === null) { gEl.textContent = '—'; gEl.style.color = 'var(--ink-2)'; }
@@ -1047,17 +1060,20 @@ const App = {
   },
 
   _openTotalDetail() {
-    const cur = this._sumBruto(this.filtered);
-    const prev = this._baselineTotal();
-    const diff = cur - prev;
-    const growth = this._growthPct(cur, prev);
-    this._showDetail(this.t('total_sales'), [
-      { label: this._rangeText(this.applied), val: cur },
-      { label: this._baselineLabel(), val: prev },
-      { label: this.t('difference'), val: diff, isDiff: true },
-      { label: this.t('growth'), val: growth, isGrowth: true },
-      { label: this.t('netto'), val: this._sumNetto(this.filtered) }
-    ]);
+    this._showDetail(this.t('total_sales'), this._baselineRows(this.filtered, this._baselineTotal()));
+  },
+
+  _baselineRows(curRows, base) {
+    const bruto = this._sumBruto(curRows);
+    const netto = this._sumNetto(curRows);
+    const cur = this._targetBasis() ? netto : bruto;
+    const rows = [{ label: this._rangeText(this.applied), val: bruto }];
+    if (this._targetBasis()) rows.push({ label: this.t('netto'), val: netto });
+    rows.push({ label: this._baselineLabel(), val: base });
+    rows.push({ label: this.t('difference'), val: cur - base, isDiff: true });
+    rows.push({ label: this.t('growth'), val: this._growthPct(cur, base), isGrowth: true });
+    if (!this._targetBasis()) rows.push({ label: this.t('netto'), val: netto });
+    return rows;
   },
 
   _openGroupDetail(groupKey) {
@@ -1093,17 +1109,8 @@ const App = {
     const curRows = this._filterEntity(this.filtered, level, key);
     const prevRows = this._filterEntity(this.filteredPrev, level, key);
     const cur = this._sumBruto(curRows);
-    const prev = this._baselineEntity(level, key, prevRows);
-    const diff = cur - prev;
-    const growth = this._growthPct(cur, prev);
-    const rows = [
-      { label: this._rangeText(this.applied), val: cur },
-      { label: this._baselineLabel(), val: prev },
-      { label: this.t('difference'), val: diff, isDiff: true },
-      { label: this.t('growth'), val: growth, isGrowth: true },
-      { label: this.t('netto'), val: this._sumNetto(curRows) },
-      { section: this.t('detail') }
-    ];
+    const rows = this._baselineRows(curRows, this._baselineEntity(level, key, prevRows));
+    rows.push({ section: this.t('detail') });
     const cu = this._sumFields(curRows, ['totalCu']);
     if (cu > 0) {
       rows.push({ label: this._fieldLabel('rataBruto'), val: cur / cu });
@@ -1380,15 +1387,19 @@ const App = {
         prev[k] = (prev[k] || 0) + (Number(r.bruto) || 0);
       });
     }
-    return Object.keys(vals).map(k => ({
-      key: k,
-      vals: vals[k],
-      netto: this._nettoOf(vals[k]),
-      total: vals[k].bruto,
-      prev: prev[k] || 0,
-      growth: this._growthPct(vals[k].bruto, prev[k] || 0),
-      val: vals[k].bruto
-    }));
+    const onTarget = this._targetBasis();
+    return Object.keys(vals).map(k => {
+      const netto = this._nettoOf(vals[k]);
+      return {
+        key: k,
+        vals: vals[k],
+        netto: netto,
+        total: vals[k].bruto,
+        prev: prev[k] || 0,
+        growth: this._growthPct(onTarget ? netto : vals[k].bruto, prev[k] || 0),
+        val: vals[k].bruto
+      };
+    });
   },
 
   _groupSales(records, level) {
@@ -1993,7 +2004,7 @@ const App = {
   },
 
   _salesRowKey(date, branch) {
-    return String(date) + '|' + String(branch == null ? '' : branch).replace(/\s+/g, ' ').trim().toLowerCase();
+    return String(date) + '|' + this._storeNorm(this._canonStore(branch));
   },
 
   _sameSalesRow(a, b) {
@@ -2077,12 +2088,10 @@ const App = {
   },
   _buildStoreIndex() {
     const idx = {};
-    const add = (name, canon) => {
-      const n = this._storeNorm(name);
-      if (n && idx[n] === undefined) idx[n] = canon;
-    };
-    (this.activeBranches || []).forEach(b => add(b, b));
-    Array.from(new Set((this.data || []).map(r => r.branch))).forEach(b => add(b, b));
+    (this.regional || []).forEach(r => {
+      const n = this._storeNorm(r.branch);
+      if (n && idx[n] === undefined) idx[n] = r.branch;
+    });
     this._storeIndex = idx;
   },
 
