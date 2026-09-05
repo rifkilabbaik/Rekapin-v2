@@ -33,7 +33,6 @@ const Sheets = {
   async fetchAll()      { return (await this._get('fetchAll')).data; },
   async fetchRegional() { return (await this._get('fetchRegional')).data; },
   async status()        { return (await this._get('status')).data; },
-  async checkDuplicate(pairs) { return (await this._post({ action: 'checkDuplicate', pairs })).data; },
   async upload(rows)          { return (await this._post({ action: 'upload', rows })).data; },
 
   async fetchActivities()  { return (await this._get('fetchKegiatan')).data; },

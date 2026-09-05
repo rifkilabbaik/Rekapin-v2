@@ -1,6 +1,5 @@
 const CONFIG = {
   APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbwK__oY_oHekdQMCNsT71oDkqvXssb4UUaNQreEDM8-3wxkQ-wLGlYAcaA5593SwoNr/exec',
-  SHEET_URL: 'https://docs.google.com/spreadsheets/d/1acKbzLiz-fMC72_TxDsxbNCEv64b6DmA7B-Z-lga-J0/edit',
 
   SALES_TABLE_KEYS: [
     'bruto', 'dineIn', 'takeAway', 'shopeeFood', 'goFood', 'grabFood', 'katering',
@@ -246,10 +245,10 @@ const CONFIG = {
 
       setting_theme: 'Tema', setting_language: 'Bahasa', setting_money: 'Format uang',
       setting_text: 'Format text', setting_info: 'Info data', setting_storage: 'Penyimpanan',
-      setting_source: 'Sumber data', setting_app: 'Aplikasi', setting_version: 'Versi',
+      setting_app: 'Aplikasi', setting_version: 'Versi',
       setting_cache_app: 'Cache app', setting_status: 'Status', setting_last_date: 'Data terakhir',
       setting_row_count: 'Total baris', setting_days: 'Hari tersimpan', setting_active_stores: 'Toko aktif',
-      setting_cache: 'Cache', setting_reload: 'Muat ulang data', setting_open_sheet: 'Buka Spreadsheet',
+      setting_cache: 'Cache', setting_reload: 'Muat ulang data',
       setting_clear_cache: 'Bersihkan', setting_connected: 'Terhubung', setting_not_connected: 'Belum terhubung',
       days_suffix: 'hari', stores_suffix: 'toko',
 
@@ -261,14 +260,16 @@ const CONFIG = {
       upload_progress: 'Upload {a} / {b}',
       upload_done: 'Selesai. {n} baris ditambahkan.',
       upload_success: 'Upload berhasil', upload_fail_title: 'Upload gagal',
-      upload_fail_process: 'Gagal memproses file',
+      upload_fail_process: 'Data tidak sesuai',
 
       upload_kind_sales: 'Penjualan', upload_kind_complaint: 'Komplain',
       upload_detected: 'Terdeteksi file {k}',
       upload_skipped_rows: '{n} baris dilewati karena datanya tidak lengkap/tidak valid.',
       upload_complaints_suffix: 'komplain',
-      upload_ready: '{n} baris siap diupload. Baris yang sudah ada (tanggal + toko sama) otomatis dilewati.',
-      upload_split: '{a} baru · {b} sudah ada di spreadsheet',
+      upload_ready: '{n} baris siap diupload.',
+      upload_split: '{a} baru · {b} sudah ada',
+      upload_split_over: '{u} timpa · {a} baru · {b} sudah ada',
+      upload_overwritten: '{n} baris ditimpa.',
       upload_done_complaint: '{n} komplain ditambahkan.',
       upload_dup_skipped: '{n} duplikat dilewati.',
       upload_none_added: 'Tidak ada data baru — semua baris sudah ada di spreadsheet.',
@@ -382,10 +383,10 @@ const CONFIG = {
 
       setting_theme: 'Theme', setting_language: 'Language', setting_money: 'Money format',
       setting_text: 'Text style', setting_info: 'Data info', setting_storage: 'Storage',
-      setting_source: 'Data source', setting_app: 'Application', setting_version: 'Version',
+      setting_app: 'Application', setting_version: 'Version',
       setting_cache_app: 'App cache', setting_status: 'Status', setting_last_date: 'Last data',
       setting_row_count: 'Total rows', setting_days: 'Days stored', setting_active_stores: 'Active stores',
-      setting_cache: 'Cache', setting_reload: 'Reload data', setting_open_sheet: 'Open Spreadsheet',
+      setting_cache: 'Cache', setting_reload: 'Reload data',
       setting_clear_cache: 'Clear', setting_connected: 'Connected', setting_not_connected: 'Not connected',
       days_suffix: 'days', stores_suffix: 'stores',
 
@@ -397,14 +398,16 @@ const CONFIG = {
       upload_progress: 'Uploading {a} / {b}',
       upload_done: 'Done. {n} rows added.',
       upload_success: 'Upload successful', upload_fail_title: 'Upload failed',
-      upload_fail_process: 'Failed to process file',
+      upload_fail_process: 'Data does not match',
 
       upload_kind_sales: 'Sales', upload_kind_complaint: 'Complaint',
       upload_detected: 'Detected {k} file',
       upload_skipped_rows: '{n} rows skipped because the data was incomplete/invalid.',
       upload_complaints_suffix: 'complaints',
-      upload_ready: '{n} rows ready to upload. Existing rows (same date + store) are skipped automatically.',
-      upload_split: '{a} new · {b} already in the spreadsheet',
+      upload_ready: '{n} rows ready to upload.',
+      upload_split: '{a} new · {b} already there',
+      upload_split_over: '{u} overwritten · {a} new · {b} already there',
+      upload_overwritten: '{n} rows overwritten.',
       upload_done_complaint: '{n} complaints added.',
       upload_dup_skipped: '{n} duplicates skipped.',
       upload_none_added: 'No new data — every row already exists in the spreadsheet.',
