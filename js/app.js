@@ -246,6 +246,7 @@ const App = {
     window.scrollTo({ top: 0, behavior: 'smooth' });
     if (page === 'sales') this._renderSales();
     if (page === 'upload') this._resetUploadUi();
+    if (page === 'settings') this._safe('accessDropdown', () => this._buildAccessDropdown());
     if (page === 'activity')  { this._renderActivityPage();  this.loadActivities(true); }
     if (page === 'complaint') { this._renderComplaintPage(); this.loadComplaints(true); }
   },
@@ -1604,6 +1605,7 @@ const App = {
       this._toast(this.t('toast_cache_cleared'));
     });
     this._on('btnReload', 'click', () => this.loadAll());
+    this._on('btnAccessApply', 'click', () => this._applyAccessDraft());
 
     this._buildSettingDropdowns();
   },
@@ -1650,11 +1652,17 @@ const App = {
       this.accessRegionals = known;
       this._saveAccessRegionals();
     }
+    this._accessDraft = this.accessRegionals.slice();
     this._initMultiDropdown('accessRegionals', accessOpts, this.accessRegionals, (vals) => {
-      this.accessRegionals = vals;
-      this._saveAccessRegionals();
-      this._applyAccessRegionals();
+      this._accessDraft = vals;
     }, { search: true, allLabel: this.t('dd_all_regionals') });
+  },
+
+  _applyAccessDraft() {
+    this.accessRegionals = (this._accessDraft || []).slice();
+    this._saveAccessRegionals();
+    this._applyAccessRegionals();
+    this._toast(this.t('setting_regional_saved'));
   },
 
   _renderSettings() {

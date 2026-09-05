@@ -1798,3 +1798,11 @@ textarea.form-input { resize: vertical; line-height: 1.5; }
   color: var(--ink-2);
   margin-top: 6px;
 }
+
+.setting-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.setting-inline .dropdown-select { flex: 1 1 auto; min-width: 0; }
+.setting-inline .btn { flex: 0 0 auto; padding-left: 20px; padding-right: 20px; }
